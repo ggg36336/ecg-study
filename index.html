@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>心电教学练习工具 · Canvas 标尺版</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #b42318;
+    --ruler: #f59e0b;
+    --ruler-line: #f7b267;
+    --grid-minor: #f8d7dd;
+    --grid-major: #e9a7b2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 22px 18px 48px; }
+  h1 { font-size: 24px; margin: 0 0 10px; letter-spacing: .5px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  .disclaimer {
+    background: #fff1f0; border: 1px solid #f3b8b2; color: #8c1d18;
+    border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 8px;
+  }
+  .disclaimer b { color: #b42318; }
+  .caption { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  .control-row {
+    display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center;
+    justify-content: space-between; margin-bottom: 14px;
+  }
+  .field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  select {
+    font: inherit; color: var(--ink); background: var(--card);
+    border: 1px solid #cfd4dc; border-radius: 7px; padding: 7px 10px; min-width: 240px;
+    outline: none;
+  }
+  select:focus { border-color: #8b93a1; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .btn {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--card);
+    border: 1px solid #cfd4dc; border-radius: 7px; padding: 6px 12px; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { background: #f3f4f6; border-color: #9aa1ad; }
+  .btn.primary[aria-pressed="true"] {
+    background: #fff4e5; border-color: var(--ruler); color: #92400e; font-weight: 600;
+  }
+  .btn.quick { border-color: #e2b93b; color: #8a5a00; background: #fffaf0; }
+  .btn.quick:hover:not(:disabled) { background: #fdf1d6; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+  .divider { width: 1px; height: 26px; background: var(--line); margin: 0 2px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .hint.warn { color: #b42318; }
+
+  .chart-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px 6px; box-shadow: 0 1px 2px rgba(16,24,40,.04);
+    overflow-x: auto;
+  }
+  #ecg { display: block; width: 100%; min-width: 760px; height: 420px; }
+  #ecg.ruler-mode { cursor: crosshair; }
+  #ecg:not(.ruler-mode) { cursor: default; }
+  .chart-foot {
+    display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between;
+    color: var(--muted); font-size: 12px; border-top: 1px dashed var(--line);
+    margin-top: 6px; padding: 6px 2px 4px;
+  }
+
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0 6px; }
+  .metric {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px;
+  }
+  .metric .label { color: var(--muted); font-size: 12px; }
+  .metric .value { font-size: 20px; font-weight: 600; line-height: 1.35; }
+  .metric .help { color: var(--muted); font-size: 12px; }
+  .ref { color: var(--muted); font-size: 12.5px; margin: 6px 0 18px; }
+
+  .panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 14px;
+  }
+  .panel ol, .panel ul { margin: 0; padding-left: 22px; }
+  .panel li { margin: 4px 0; }
+  .conclusion { margin: 0; font-size: 16px; font-weight: 600; color: #0f5132; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 18px; }
+  @media (max-width: 720px) {
+    .metrics { grid-template-columns: 1fr; }
+    #ecg { height: 320px; }
+    select { min-width: 0; width: 100%; }
+  }
+
+  /* ================= 新增：自测刷题模式 ================= */
+  .mode-switch {
+    display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+    background: var(--card); border: 1px solid #cfd4dc; border-radius: 7px;
+  }
+  .mode-switch label {
+    display: flex; align-items: center; gap: 6px; padding: 4px 11px;
+    font-size: 13px; color: var(--muted); cursor: pointer; border-radius: 6px;
+    white-space: nowrap; transition: background .15s, color .15s;
+  }
+  .mode-switch label.active { background: #fff4e5; color: #92400e; font-weight: 600; }
+  .mode-switch input[type="radio"] { margin: 0; accent-color: #b45309; cursor: pointer; }
+
+  .quiz-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 18px; margin-top: 14px;
+    box-shadow: 0 1px 2px rgba(16,24,40,.04);
+  }
+  .quiz-head { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; align-items: baseline; }
+  .quiz-head .q-title { font-size: 15px; font-weight: 600; }
+  .quiz-head .q-ask { color: var(--muted); font-size: 13px; margin-left: 4px; }
+  .quiz-stats { color: var(--muted); font-size: 12.5px; }
+  .quiz-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin: 12px 0 10px; }
+  .opt {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fcfcfd;
+    font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .opt:hover { border-color: #9aa1ad; }
+  .opt input[type="radio"] { margin: 0; accent-color: #b45309; }
+  .opt.correct { border-color: #0f7b4f; background: #eafaf1; color: #0f5132; font-weight: 600; }
+  .opt.wrong { border-color: #b42318; background: #fff1f0; color: #8c1d18; }
+  .opt.locked { opacity: .75; cursor: default; }
+  .quiz-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .quiz-feedback { margin-top: 10px; font-size: 13px; min-height: 21px; }
+  .quiz-feedback.ok { color: #0f5132; font-weight: 600; }
+  .quiz-feedback.err { color: #b42318; font-weight: 600; }
+  .quiz-feedback.tip { color: var(--muted); }
+
+  /* 刷题模式且未查看解析时：隐藏全部文字判读板块（图内标注由 JS 控制） */
+  body.quiz-mode:not(.quiz-revealed) .metrics,
+  body.quiz-mode:not(.quiz-revealed) .ref,
+  body.quiz-mode:not(.quiz-revealed) .panel { display: none; }
+
+  @media (max-width: 720px) {
+    .quiz-options { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>心电教学练习工具（II 导联 · Canvas 标尺版）</h1>
+    <div class="disclaimer">
+      <b>免责声明：</b>本工具仅供医学生教学练习使用。所有波形均由计算机算法模拟生成，
+      不来自任何真实患者，<b>不能用于临床诊断、治疗决策或任何医疗用途</b>。
+    </div>
+    <p class="caption">
+      提供十四种模拟心律：窦性心律、室性早搏、心房颤动、房性早搏、一度房室传导阻滞、
+      二度Ⅰ型房室传导阻滞（文氏型）、二度Ⅱ型房室传导阻滞（莫氏型）、
+      三度房室传导阻滞（完全性房室传导阻滞）、室性心动过速、心室颤动（室颤）、
+      窦性心动过速、窦性心动过缓、阵发性室上性心动过速（室上速）、
+      右束支传导阻滞RBBB（II导联简化教学版）。
+      网格按标准心电图纸绘制（走纸速度 25 mm/s，增益 10 mm/mV）。
+    </p>
+  </header>
+
+  <section class="control-row">
+    <label class="field">
+      <span>选择心律</span>
+      <select id="rhythmSelect">
+        <option>窦性心律</option>
+        <option>室性早搏</option>
+        <option>心房颤动</option>
+        <option>房性早搏</option>
+        <option>一度房室传导阻滞</option>
+        <option>二度Ⅰ型房室传导阻滞（文氏型）</option>
+        <option>二度Ⅱ型房室传导阻滞（莫氏型）</option>
+        <option>三度房室传导阻滞（完全性房室传导阻滞）</option>
+        <option>室性心动过速</option>
+        <option>心室颤动（室颤）</option>
+        <option>窦性心动过速</option>
+        <option>窦性心动过缓</option>
+        <option>阵发性室上性心动过速（室上速）</option>
+        <option>右束支传导阻滞RBBB（II导联简化教学版）</option>
+      </select>
+    </label>
+    <div class="mode-switch" role="group" aria-label="学习 / 刷题 模式切换">
+      <label class="active"><input type="radio" name="modeSwitch" value="study" checked>学习模式</label>
+      <label><input type="radio" name="modeSwitch" value="quiz">刷题模式</label>
+    </div>
+    <div class="toolbar">
+      <button id="btnRuler" class="btn primary" aria-pressed="false"
+              title="激活后两次点击波形区即可画出标尺">标尺测量</button>
+      <button id="btnClear" class="btn" title="清除全部标尺">清空标尺</button>
+      <span class="divider"></span>
+      <button class="btn quick" data-auto="PR" title="自动测量 PR 间期">测PR</button>
+      <button class="btn quick" data-auto="QRS" title="自动测量 QRS 时限">测QRS</button>
+      <button class="btn quick" data-auto="QT" title="自动测量 QT 间期并计算 QTc">测QT</button>
+      <button class="btn quick" data-auto="RR" title="自动测量 RR 间期并换算心率">测RR+心率</button>
+    </div>
+  </section>
+
+  <section class="chart-card">
+    <canvas id="ecg"></canvas>
+    <div class="chart-foot">
+      <span id="modeHint">标尺测量未激活：点击「标尺测量」后再点两次波形区即可测量。</span>
+      <span>纸速 25 mm/s · 1 小格 = 0.04 s · 心率 = 60 / RR 间期</span>
+    </div>
+  </section>
+
+  <section class="quiz-card" id="quizCard" hidden>
+    <div class="quiz-head">
+      <div>
+        <span class="q-title" id="quizTitle">第 1 / 14 题</span><span class="q-ask">｜请选择心电图诊断</span>
+      </div>
+      <div class="quiz-stats" id="quizStats">已做 0 题 · 正确 0 题 · 正确率 —</div>
+    </div>
+    <div class="quiz-options" id="quizOptions"></div>
+    <div class="quiz-actions">
+      <button class="btn primary" id="btnSubmit">提交答案</button>
+      <button class="btn" id="btnNext" disabled>下一题</button>
+      <button class="btn" id="btnReveal" disabled>查看解析</button>
+      <span class="divider"></span>
+      <button class="btn" id="btnAddWrong" disabled>加入错题本</button>
+      <button class="btn" id="btnWrongList">查看错题本</button>
+      <button class="btn" id="btnReset">重置统计&amp;清空错题本</button>
+    </div>
+    <div class="quiz-feedback tip" id="quizFeedback">请选择一个诊断后提交答案。</div>
+  </section>
+
+  <section class="metrics" id="metrics"></section>
+  <p class="ref" id="refNote"></p>
+
+  <section class="panel">
+    <h2>判读依据</h2>
+    <ol id="criteria"></ol>
+  </section>
+
+  <section class="panel">
+    <h2>结论</h2>
+    <p class="conclusion" id="conclusion"></p>
+  </section>
+
+  <section class="panel">
+    <h2>考点卡片</h2>
+    <ul id="teaching"></ul>
+  </section>
+
+  <footer>
+    绘图参数：采样率 500 Hz · 显示时长 10 s · 横轴 1 小格 0.04 s / 1 大格 0.20 s ·
+    纵轴 1 小格 0.10 mV / 1 大格 0.50 mV
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   1. 基本参数（与 ecg_app.py 保持一致）
+   ============================================================ */
+const FS = 500;                 // 采样率 500 Hz
+const DURATION = 10;            // 显示时长 10 s
+const SINUS_RR = 0.80;          // 窦性 RR 间期
+const SINUS_RATE = 60 / SINUS_RR;
+const PR = 0.16;                // 正常 PR 间期
+const PAC_PR = 0.22;            // 房早 P′R 间期
+const PR_AVB1 = 0.28;           // 一度房室传导阻滞 PR 间期
+const QRS_NORMAL = 0.08;        // 正常 QRS 时限
+const QRS_PVC = 0.16;           // 室早 QRS 时限
+const COUPLING = 0.60;          // 室早配对间期
+const COMP_PAUSE = 2 * SINUS_RR - COUPLING;   // 完全性代偿间歇 1.00 s
+const ESCAPE_RR = 1.55;         // 三度室性逸搏 RR
+const QRS_ESCAPE = 0.14;        // 室性逸搏 / 室速宽 QRS
+
+const X_SMALL = 0.04, X_MAJOR = 0.20;
+const Y_SMALL = 0.10, Y_MAJOR = 0.50;
+const Y_MIN = -0.9, Y_MAX = 1.7;
+
+/* ============================================================
+   2. 波形生成（高斯波叠加；房颤/室颤使用固定种子保证可重复）
+   ============================================================ */
+const N = Math.round(DURATION * FS) + 1;
+const T = new Float64Array(N);
+for (let i = 0; i < N; i++) T[i] = i / FS;
+
+function addGauss(sig, center, sigma, amp) {
+  const lo = Math.max(0, Math.floor((center - 6 * sigma) * FS));
+  const hi = Math.min(N - 1, Math.ceil((center + 6 * sigma) * FS));
+  for (let i = lo; i <= hi; i++) {
+    const d = (T[i] - center) / sigma;
+    sig[i] += amp * Math.exp(-0.5 * d * d);
+  }
+}
+
+// 固定种子随机数（mulberry32），保证每次打开显示同一段教学波形
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let x = a;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function addSinusBeat(sig, r) {
+  addGauss(sig, r - 0.14, 0.022, 0.15);   // P 波
+  addGauss(sig, r - 0.025, 0.007, -0.08); // q
+  addGauss(sig, r, 0.012, 1.00);           // R
+  addGauss(sig, r + 0.025, 0.007, -0.12); // s
+  addGauss(sig, r + 0.26, 0.055, 0.30);   // T
+}
+
+function addPvcBeat(sig, r) {
+  addGauss(sig, r - 0.045, 0.015, -0.30);
+  addGauss(sig, r + 0.005, 0.026, 1.40);
+  addGauss(sig, r + 0.055, 0.016, -0.55);
+  addGauss(sig, r + 0.28, 0.060, -0.40);
+}
+
+function addAfBeat(sig, r) {
+  addGauss(sig, r - 0.025, 0.007, -0.08);
+  addGauss(sig, r, 0.012, 1.00);
+  addGauss(sig, r + 0.025, 0.007, -0.12);
+  addGauss(sig, r + 0.26, 0.055, 0.30);
+}
+
+function addPacBeat(sig, r) {
+  addGauss(sig, r - PAC_PR, 0.024, -0.12);
+  addGauss(sig, r - 0.025, 0.007, -0.08);
+  addGauss(sig, r, 0.012, 1.00);
+  addGauss(sig, r + 0.025, 0.007, -0.12);
+  addGauss(sig, r + 0.26, 0.055, 0.30);
+}
+
+function addAvb1Beat(sig, r) {
+  addGauss(sig, r - 0.27, 0.022, 0.15);
+  addGauss(sig, r - 0.025, 0.007, -0.08);
+  addGauss(sig, r, 0.012, 1.00);
+  addGauss(sig, r + 0.025, 0.007, -0.12);
+  addGauss(sig, r + 0.26, 0.055, 0.30);
+}
+
+function addWenckebachBeat(sig, pTime, pr) {
+  addGauss(sig, pTime, 0.022, 0.15);
+  const r = pTime + pr;
+  addGauss(sig, r - 0.025, 0.007, -0.08);
+  addGauss(sig, r, 0.012, 1.00);
+  addGauss(sig, r + 0.025, 0.007, -0.12);
+  addGauss(sig, r + 0.26, 0.055, 0.30);
+}
+
+function addEscapeBeat(sig, r) {
+  addGauss(sig, r - 0.040, 0.014, -0.25);
+  addGauss(sig, r + 0.004, 0.022, 1.15);
+  addGauss(sig, r + 0.048, 0.014, -0.35);
+  addGauss(sig, r + 0.27, 0.055, -0.28);
+}
+
+// 新增：室上速搏动（窄 QRS + 埋藏于 QRS/T 内的 P 波；T 波位置上移以容纳快心率）
+function addSvtBeat(sig, r) {
+  addGauss(sig, r - 0.025, 0.007, -0.08);
+  addGauss(sig, r, 0.012, 1.00);
+  addGauss(sig, r + 0.025, 0.007, -0.12);
+  addGauss(sig, r + 0.16, 0.040, 0.18);
+}
+
+// 新增：RBBB 搏动（窦性 P 波 + 宽 QRS 0.14 s，终末宽钝 S 波，T 波继发性倒置）
+function addRbbbBeat(sig, r) {
+  addGauss(sig, r - 0.14, 0.022, 0.15);     // 窦性 P 波，PR 0.16 s
+  addGauss(sig, r, 0.012, 0.85);            // 初始 R 波
+  addGauss(sig, r + 0.040, 0.024, -0.35);   // 终末宽钝 S 波（QRS 总时限约 0.14 s）
+  addGauss(sig, r + 0.30, 0.060, -0.22);    // 继发性 T 波倒置
+}
+
+// 生成某一心律的完整波形，并返回判读所需的关键时刻
+function buildWave(rhythm) {
+  const sig = new Float64Array(N);
+  let pvcTime = null, afTimes = null, vtTimes = null;
+
+  if (rhythm === '窦性心律') {
+    for (let r = 0.4; r < DURATION - 0.2; r += SINUS_RR) addSinusBeat(sig, r);
+  } else if (rhythm === '心房颤动') {
+    const rng = mulberry32(7);
+    for (let k = 0; k < 6; k++) {
+      const freq = 6 + rng() * 4, phase = rng() * 2 * Math.PI, amp = 0.010 + rng() * 0.015;
+      for (let i = 0; i < N; i++) sig[i] += amp * Math.sin(2 * Math.PI * freq * T[i] + phase);
+    }
+    afTimes = [];
+    let r = 0.35;
+    while (r < DURATION - 0.25) { afTimes.push(r); addAfBeat(sig, r); r += 0.45 + rng() * 0.5; }
+  } else if (rhythm === '房性早搏') {
+    [0.4, 1.2, 2.0].forEach(r => addSinusBeat(sig, r));
+    addPacBeat(sig, 2.68);
+    for (let r = 3.54; r < DURATION - 0.2; r += SINUS_RR) addSinusBeat(sig, r);
+  } else if (rhythm === '一度房室传导阻滞') {
+    for (let r = 0.4; r < DURATION - 0.2; r += SINUS_RR) addAvb1Beat(sig, r);
+  } else if (rhythm === '二度Ⅰ型房室传导阻滞（文氏型）') {
+    const prCycle = [0.18, 0.26, 0.32];
+    let i = 0;
+    for (let p = 0.4; p < DURATION - 0.2; p += SINUS_RR, i++) {
+      if (i % 4 === 3) addGauss(sig, p, 0.022, 0.15);       // P 后 QRS 脱落
+      else addWenckebachBeat(sig, p, prCycle[i % 4]);
+    }
+  } else if (rhythm === '二度Ⅱ型房室传导阻滞（莫氏型）') {
+    let i = 0;
+    for (let p = 0.4; p < DURATION - 0.2; p += SINUS_RR, i++) {
+      if (i % 3 === 2) addGauss(sig, p, 0.022, 0.15);       // P 后 QRS 脱落
+      else addWenckebachBeat(sig, p, 0.24);
+    }
+  } else if (rhythm === '三度房室传导阻滞（完全性房室传导阻滞）') {
+    for (let p = 0.4; p < DURATION - 0.2; p += SINUS_RR) addGauss(sig, p, 0.022, 0.15);
+    for (let k = 0; k < 6; k++) addEscapeBeat(sig, 0.9 + k * ESCAPE_RR);
+  } else if (rhythm === '室性心动过速') {
+    addSinusBeat(sig, 0.54); addSinusBeat(sig, 1.34);
+    vtTimes = [];
+    for (let k = 0; k < 18; k++) {
+      const r = 1.90 + k * 0.46;
+      vtTimes.push(r);
+      if (k !== 6) addEscapeBeat(sig, r);
+    }
+    let i = 0;
+    for (let p = 0.4; p < DURATION - 0.2; p += SINUS_RR, i++) {
+      if (i === 0 || i === 1) continue;                     // 前 2 个 P 已随窦性搏动画出
+      if (i === 5) continue;                                // 4.40 s 的 P 由夺获波一并画出
+      addGauss(sig, p, 0.022, 0.15);
+    }
+    addWenckebachBeat(sig, 4.40, PR);                       // 夺获波
+  } else if (rhythm === '心室颤动（室颤）') {
+    const rng = mulberry32(11);
+    const chaos = new Float64Array(N);
+    for (let k = 0; k < 7; k++) {
+      const freq = 2 + rng() * 5, phase = rng() * 2 * Math.PI, amp = 0.05 + rng() * 0.17;
+      for (let i = 0; i < N; i++) chaos[i] += amp * Math.sin(2 * Math.PI * freq * T[i] + phase);
+    }
+    const envFreq = 0.15 + rng() * 0.20, envPhase = rng() * 2 * Math.PI;
+    let peak = 0;
+    for (let i = 0; i < N; i++) {
+      const env = 0.55 + 0.45 * Math.sin(2 * Math.PI * envFreq * T[i] + envPhase);
+      chaos[i] *= env;
+      peak = Math.max(peak, Math.abs(chaos[i]));
+    }
+    for (let i = 0; i < N; i++) sig[i] = chaos[i] * (0.85 / peak);
+  } else if (rhythm === '窦性心动过速') {
+    // 窦速：RR 0.50 s（心率 120 次/分），正常 P–QRS–T，PR 0.16 s，QRS 0.08 s，节律规整
+    for (let r = 0.4; r < DURATION - 0.2; r += 0.50) addSinusBeat(sig, r);
+  } else if (rhythm === '窦性心动过缓') {
+    // 窦缓：RR 1.20 s（心率 50 次/分），正常 P–QRS–T，PR 0.16 s，QRS 0.08 s，节律规整
+    for (let r = 0.4; r < DURATION - 0.2; r += 1.20) addSinusBeat(sig, r);
+  } else if (rhythm === '阵发性室上性心动过速（室上速）') {
+    // 室上速：RR 0.333 s（心率 180 次/分），窄 QRS 0.08 s，无可见 P 波，节律绝对整齐
+    for (let r = 0.4; r < DURATION - 0.2; r += 0.333) addSvtBeat(sig, r);
+  } else if (rhythm === '右束支传导阻滞RBBB（II导联简化教学版）') {
+    // RBBB：RR 0.80 s（心率 75 次/分），PR 0.16 s，QRS 0.14 s（终末宽钝 S 波），T 波继发性倒置
+    for (let r = 0.4; r < DURATION - 0.2; r += 0.80) addRbbbBeat(sig, r);
+  } else {
+    pvcTime = 2.6;
+    [0.4, 1.2, 2.0].forEach(r => addSinusBeat(sig, r));
+    addPvcBeat(sig, pvcTime);
+    for (let r = 3.6; r < DURATION - 0.2; r += SINUS_RR) addSinusBeat(sig, r);
+  }
+  return { sig, pvcTime, afTimes, vtTimes };
+}
+
+/* ============================================================
+   3. 图内标注（坐标单位：x = 秒，y = mV；dy = 像素偏移）
+   ============================================================ */
+const A = (text, x, y, dy = 0, color = '#1f2937', size = 12) => ({ text, x, y, dy, color, size });
+const M = (x1, x2, y, color = '#b45309') => ({ x1, x2, y, color });
+
+function buildAnnotations(rhythm, wave) {
+  const annotations = [];
+  const marks = [];
+
+  if (rhythm === '窦性心律') {
+    annotations.push(
+      A('P 波', 1.06, 0.15, 16),
+      A('QRS 波群', 1.20, 1.00, 14),
+      A('T 波', 1.46, 0.30, 16),
+    );
+  } else if (rhythm === '心房颤动') {
+    const af = wave.afTimes;
+    const focus = af[2];
+    let longestI = 0;
+    for (let i = 0; i < af.length - 1; i++) if (af[i + 1] - af[i] > af[longestI + 1] - af[longestI]) longestI = i;
+    const fX = (af[longestI] + af[longestI + 1]) / 2;
+    annotations.push(
+      A('无 P 波', focus - 0.35, 0.55, 0, '#b42318'),
+      A('QRS 波群（窄）', focus, 1.00, 14),
+      A('T 波', focus + 0.26, 0.30, 16),
+      A('基线细碎 f 波', fX, -0.30, -12, '#b45309'),
+      A('RR 间期绝对不齐', 5.0, 1.32, 0, '#b42318'),
+    );
+  } else if (rhythm === '房性早搏') {
+    annotations.push(
+      A('P′ 波（提前、形态异位）', 2.46, -0.12, -20, '#b42318'),
+      A('QRS 波群', 2.68, 1.00, 14),
+      A('T 波', 2.94, 0.30, 16),
+      A('代偿间歇不完全（0.86 s）', 3.11, -0.82, 0, '#b45309'),
+    );
+    marks.push(M(2.68, 3.54, -0.66));
+  } else if (rhythm === '一度房室传导阻滞') {
+    annotations.push(
+      A('P 波（窦性，直立）', 0.93, 0.15, 16),
+      A('QRS 波群（窄）', 1.20, 1.00, 14),
+      A('T 波', 1.46, 0.30, 16),
+      A('每个 P 波后均跟随 QRS（无脱落）', 5.0, 1.35, 0, '#b42318'),
+      A(`PR 间期 ${PR_AVB1.toFixed(2)} s（恒定延长，约 7 小格）`, 1.02, -0.46, 0, '#b45309', 11),
+    );
+    marks.push(M(0.88, 1.16, -0.30));
+  } else if (rhythm === '二度Ⅰ型房室传导阻滞（文氏型）') {
+    annotations.push(
+      A('P 波（窦性，规律出现）', 0.40, 0.15, 16),
+      A('QRS 波群（窄）', 1.46, 1.00, 14),
+      A('T 波', 1.72, 0.30, 16),
+      A('P 波未下传（QRS 脱落）', 2.80, 0.15, 24, '#b42318'),
+      A('脱落后 PR 重置为 0.18 s', 3.60, -0.30, -32, '#b45309'),
+      A('文氏周期：PR 渐长 → QRS 脱落 → PR 重置（4:3 传导）', 5.4, 1.38, 0, '#b42318'),
+    );
+    [[0.40, 0.18], [1.20, 0.26], [2.00, 0.32]].forEach(([p, pr]) => {
+      marks.push(M(p, p + pr, -0.30));
+      annotations.push(A(`PR ${pr.toFixed(2)} s`, p + pr / 2, -0.46, 0, '#b45309', 11));
+    });
+  } else if (rhythm === '二度Ⅱ型房室传导阻滞（莫氏型）') {
+    annotations.push(
+      A('P 波（窦性，规律出现）', 0.40, 0.15, 16),
+      A('QRS 波群（窄）', 1.44, 1.00, 14),
+      A('T 波', 1.70, 0.30, 16),
+      A('P 波后 QRS 突然脱落', 2.00, 0.15, 24, '#b42318'),
+      A('PR 间期恒定（无渐长）→ QRS 突然脱落（3:2 传导）', 5.2, 1.38, 0, '#b42318'),
+      A('长间歇 = 2 个 P-P 间期（1.60 s）', 2.24, -0.82, 0, '#b45309'),
+    );
+    [[0.40, 0.24], [1.20, 0.24], [2.80, 0.24]].forEach(([p, pr]) => {
+      marks.push(M(p, p + pr, -0.30));
+      annotations.push(A(`PR ${pr.toFixed(2)} s`, p + pr / 2, -0.46, 0, '#b45309', 11));
+    });
+    marks.push(M(1.44, 3.04, -0.66));
+  } else if (rhythm === '三度房室传导阻滞（完全性房室传导阻滞）') {
+    annotations.push(
+      A('P 波（规律出现）', 3.60, 0.15, 16),
+      A('QRS 波群（宽大畸形）', 4.00, 1.15, 12),
+      A('T 波与主波方向相反', 4.27, -0.28, -16),
+      A(`PP 间期规则（${SINUS_RR.toFixed(2)} s）`, 6.0, 0.85, 0, '#b45309'),
+      A('房室完全分离（P 与 QRS 无固定 PR）', 5.0, 1.50, 0, '#b42318'),
+      A('心室率 < 心房率（P 波多于 QRS）', 8.3, 1.50, 0, '#b42318'),
+      A(`RR 间期规则（${ESCAPE_RR.toFixed(2)} s）`, 1.67, -0.82, 0, '#b45309'),
+    );
+    marks.push(M(0.90, 0.90 + ESCAPE_RR, -0.66));
+  } else if (rhythm === '室性心动过速') {
+    annotations.push(
+      A('P 波', 1.20, 0.15, 16),
+      A('QRS 波群（窄）', 1.34, 1.00, 14),
+      A('T 波', 1.60, 0.30, 16),
+      A('连续出现宽大畸形 QRS（≥3 个）', 2.4, 1.45, 0, '#b42318'),
+      A('夺获波（窄 QRS）', 4.56, 1.45, 0, '#b42318'),
+      A('心室率 130 次/分（心房率 75 次/分）', 7.6, 1.45, 0, '#b42318'),
+      A('P 波（房室分离）', 6.8, -0.50, 0, '#b42318'),
+      A('RR 间期 0.46 s（大致规整）', 2.59, -0.82, 0, '#b45309'),
+    );
+    marks.push(M(2.36, 2.82, -0.66));
+  } else if (rhythm === '心室颤动（室颤）') {
+    annotations.push(
+      A('无 P–QRS–T 波群', 1.9, 1.45, 0, '#b42318'),
+      A('颤动波：大小、形态、间距完全不规则', 5.2, 1.45, 0, '#b45309'),
+      A('立即心肺复苏 + 电除颤', 8.5, 1.45, 0, '#b42318'),
+    );
+  } else if (rhythm === '窦性心动过速') {
+    annotations.push(
+      A('P 波', 1.26, 0.15, 16),
+      A('QRS 波群（窄）', 1.40, 1.00, 14),
+      A('T 波', 1.66, 0.30, 16),
+      A('心率 120 次/分（RR 0.50 s）', 5.0, 1.45, 0, '#b42318'),
+      A('节律规整：每个 P 波后均跟随 QRS', 5.0, 0.95, 0, '#b42318'),
+    );
+    marks.push(M(1.40, 1.90, -0.66));
+    annotations.push(A('RR 0.50 s（12.5 小格）', 1.65, -0.82, 0, '#b45309'));
+  } else if (rhythm === '窦性心动过缓') {
+    annotations.push(
+      A('P 波', 1.46, 0.15, 16),
+      A('QRS 波群（窄）', 1.60, 1.00, 14),
+      A('T 波', 1.86, 0.30, 16),
+      A('心率 50 次/分（RR 1.20 s）', 5.2, 1.45, 0, '#b42318'),
+      A('P 波与 QRS 一一对应（无脱落）', 5.2, 0.95, 0, '#b42318'),
+    );
+    marks.push(M(0.40, 1.60, -0.66));
+    annotations.push(A('RR 1.20 s（30 小格）', 1.00, -0.82, 0, '#b45309'));
+  } else if (rhythm === '阵发性室上性心动过速（室上速）') {
+    annotations.push(
+      A('QRS 波群（窄，0.08 s）', 2.40, 1.00, 14),
+      A('P 波埋藏于 QRS/T 内（不可见）', 1.10, 1.45, 0, '#b42318'),
+      A('心室率 180 次/分，节律绝对整齐', 5.4, 1.45, 0, '#b42318'),
+      A('T 波', 2.56, 0.18, 16),
+    );
+    marks.push(M(2.398, 2.731, -0.66));
+    annotations.push(A('RR 0.33 s（8.3 小格）', 2.56, -0.82, 0, '#b45309'));
+  } else if (rhythm === '右束支传导阻滞RBBB（II导联简化教学版）') {
+    annotations.push(
+      A('P 波（窦性）', 1.06, 0.15, 16),
+      A('QRS 增宽 0.14 s', 1.32, 1.45, 0, '#b42318'),
+      A('终末宽钝 S 波', 1.32, 0.60, 22, '#b42318'),
+      A('T 波继发性倒置', 1.72, -0.24, -16, '#b42318'),
+      A('每个 P 波后均跟随 QRS（PR 0.16 s）', 5.2, 1.45, 0, '#b45309'),
+    );
+    marks.push(M(1.16, 1.30, -0.30));
+    marks.push(M(1.20, 2.00, -0.66));
+    annotations.push(A('QRS 0.14 s（3.5 小格）', 1.38, -0.50, 0, '#b45309', 11));
+    annotations.push(A('RR 0.80 s（心率 75 次/分）', 1.60, -0.82, 0, '#b45309'));
+  } else {   // 室性早搏
+    annotations.push(
+      A('P 波', 1.06, 0.15, 16),
+      A('QRS 波群', 1.20, 1.00, 14),
+      A('T 波', 1.46, 0.30, 16),
+      A('无 P 波', 2.46, 0.35, 22, '#b42318'),
+      A('QRS 宽大畸形（0.16 s）', 2.60, 1.45, 10, '#b42318'),
+      A('T 波与主波方向相反', 2.88, -0.42, -16, '#b42318'),
+      A(`完全性代偿间歇（${(COUPLING + COMP_PAUSE).toFixed(2)} s）`, 3.10, -0.82, 0, '#b45309'),
+    );
+    marks.push(M(2.60, 3.60, -0.66));
+  }
+  return { annotations, marks };
+}
+
+/* ============================================================
+   4. 指标、参考说明与自动测量区间
+   ============================================================ */
+function buildMetrics(rhythm, wave) {
+  if (rhythm === '心房颤动') {
+    const af = wave.afTimes, d = [];
+    for (let i = 0; i < af.length - 1; i++) d.push(af[i + 1] - af[i]);
+    const avg = d.reduce((a, b) => a + b, 0) / d.length;
+    const rate = 60 / avg;
+    return [
+      { label: '心率（平均心室率）', value: `${Math.round(rate)} 次/分`,
+        help: `房颤心室率绝对不齐；本段 RR 间期 ${Math.min(...d).toFixed(2)}–${Math.max(...d).toFixed(2)} s` },
+      { label: 'PR 间期', value: '无法测量', help: 'P 波消失，无 PR 间期（房颤时 PR 间期不适用）' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '正常参考 < 0.12 s（< 3 小格）' },
+    ];
+  }
+  if (rhythm === '房性早搏') {
+    return [
+      { label: '心率（窦性）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: '房早不改变基础窦性心率，此处为窦性搏动的心率' },
+      { label: 'P′R 间期（房早）', value: `${PAC_PR.toFixed(2)} s`, help: `窦性 PR 间期 ${PR.toFixed(2)} s；房早时 P′R 间期可延长` },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '房早 QRS 形态一般正常，正常参考 < 0.12 s' },
+    ];
+  }
+  if (rhythm === '一度房室传导阻滞') {
+    return [
+      { label: '心率（窦性）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: 'RR 间期 0.80 s；一度房室传导阻滞不改变 RR 间期与心率' },
+      { label: 'PR 间期', value: `${PR_AVB1.toFixed(2)} s`, help: '正常参考 0.12–0.20 s；> 0.20 s（> 5 小格）且恒定为 PR 延长' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '正常参考 < 0.12 s（< 3 小格）；一度房室传导阻滞 QRS 通常正常' },
+    ];
+  }
+  if (rhythm === '二度Ⅰ型房室传导阻滞（文氏型）') {
+    return [
+      { label: '心房率（窦性 P 波）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: 'P-P 间期 0.80 s；文氏型中 P 波规律出现，心房率保持不变' },
+      { label: 'PR 间期', value: '0.18→0.26→0.32 s', help: '进行性延长，第 4 个 P 波后 QRS 脱落；脱落后重置为 0.18 s' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '文氏型 QRS 通常窄（< 0.12 s），提示阻滞部位在房室结' },
+    ];
+  }
+  if (rhythm === '二度Ⅱ型房室传导阻滞（莫氏型）') {
+    return [
+      { label: '心房率（窦性 P 波）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: 'P-P 间期 0.80 s；二度Ⅱ型中 P 波规律出现，心房率不变' },
+      { label: 'PR 间期', value: '0.24 s（恒定）', help: '所有下传搏动的 PR 间期完全相同，无逐搏延长' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '本例 QRS 窄；莫氏Ⅱ型 QRS 也可增宽（≥0.12 s）' },
+    ];
+  }
+  if (rhythm === '三度房室传导阻滞（完全性房室传导阻滞）') {
+    return [
+      { label: '心房率（P 波）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: 'PP 间期 0.80 s，P 波规律出现' },
+      { label: '心室率（QRS）', value: `${(60 / ESCAPE_RR).toFixed(0)} 次/分`, help: `RR 间期 ${ESCAPE_RR.toFixed(2)} s，室性逸搏心律，明显慢于心房率` },
+      { label: 'PR 间期', value: '无固定 PR', help: '房室完全分离，P 与 QRS 之间无传导关系，PR 间期逐搏变化' },
+    ];
+  }
+  if (rhythm === '室性心动过速') {
+    return [
+      { label: '心室率（宽 QRS）', value: `${(60 / 0.46).toFixed(0)} 次/分`, help: 'RR 间期 0.46 s；室速心室率通常 100–250 次/分' },
+      { label: 'QRS 时限', value: `${QRS_ESCAPE.toFixed(2)} s`, help: '室速 QRS 宽大畸形，≥ 0.12 s（≥ 3 小格）' },
+      { label: 'PR 间期', value: '无固定 PR', help: '房室分离，P 与 QRS 无固定关系；夺获波除外' },
+    ];
+  }
+  if (rhythm === '心室颤动（室颤）') {
+    return [
+      { label: '心率', value: '无法测量', help: '无法识别 QRS 波群，心室无有效收缩，故心率无法计数' },
+      { label: 'PR 间期', value: '无法识别', help: 'P 波消失、QRS 无法辨认，PR 间期不适用' },
+      { label: 'QRS 时限', value: '无法辨认', help: '无成形 QRS 波群，仅见不规则颤动波' },
+    ];
+  }
+  if (rhythm === '室性早搏') {
+    return [
+      { label: '心率（窦性）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: '室早使瞬时 RR 改变，但基础窦性心率仍为 75 次/分' },
+      { label: 'PR 间期', value: `${PR.toFixed(2)} s`, help: '指窦性搏动的 PR 间期，正常 0.12–0.20 s' },
+      { label: 'QRS 时限（室早）', value: `${QRS_PVC.toFixed(2)} s`, help: '室早 QRS ≥ 0.12 s 即为宽大畸形' },
+    ];
+  }
+  if (rhythm === '窦性心动过速') {
+    return [
+      { label: '心率（窦性）', value: '120 次/分', help: 'RR 间期 0.50 s；成人窦速定义 > 100 次/分' },
+      { label: 'PR 间期', value: `${PR.toFixed(2)} s`, help: '正常参考 0.12–0.20 s（3–5 小格），恒定不变' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '正常参考 < 0.12 s（< 3 小格）' },
+    ];
+  }
+  if (rhythm === '窦性心动过缓') {
+    return [
+      { label: '心率（窦性）', value: '50 次/分', help: 'RR 间期 1.20 s；成人窦缓定义 < 60 次/分' },
+      { label: 'PR 间期', value: `${PR.toFixed(2)} s`, help: '正常参考 0.12–0.20 s；每个 P 波后均有 QRS，无脱落' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '正常参考 < 0.12 s（< 3 小格）' },
+    ];
+  }
+  if (rhythm === '阵发性室上性心动过速（室上速）') {
+    return [
+      { label: '心率（心室率）', value: '180 次/分', help: 'RR 间期 0.333 s；室上速通常 150–250 次/分，突发突止' },
+      { label: 'PR 间期', value: '无法测量', help: 'P 波埋藏于 QRS/T 内，体表心电图无法辨认 P 波' },
+      { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '窄 QRS（< 0.12 s），提示激动经房室结下传心室' },
+    ];
+  }
+  if (rhythm === '右束支传导阻滞RBBB（II导联简化教学版）') {
+    return [
+      { label: '心率（窦性）', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: 'RR 间期 0.80 s，节律规整，P 波与 QRS 一一对应' },
+      { label: 'PR 间期', value: `${PR.toFixed(2)} s`, help: 'PR 间期正常（0.12–0.20 s）；右束支阻滞不延长 PR' },
+      { label: 'QRS 时限', value: '0.14 s', help: '宽 QRS ≥ 0.12 s（> 3 小格），终末宽钝 S 波' },
+    ];
+  }
+  return [
+    { label: '心率', value: `${SINUS_RATE.toFixed(0)} 次/分`, help: '由 RR 间期换算：心率 = 60 / RR' },
+    { label: 'PR 间期', value: `${PR.toFixed(2)} s`, help: '正常参考 0.12–0.20 s（3–5 小格）' },
+    { label: 'QRS 时限', value: `${QRS_NORMAL.toFixed(2)} s`, help: '正常参考 < 0.12 s（< 3 小格）' },
+  ];
+}
+
+function buildRefNote(rhythm) {
+  const notes = {
+    '心房颤动': '房颤参考：P 波消失、代之以 f 波；RR 间期绝对不齐；QRS 时限 < 0.12 s；因无 P 波，PR 间期不适用。',
+    '房性早搏': '房早参考：P′R 间期 0.12–0.20 s（可延长）；QRS 时限 < 0.12 s；代偿间歇多不完全。',
+    '一度房室传导阻滞': '一度房室传导阻滞参考：PR 间期 > 0.20 s（> 5 小格）且恒定；每个 P 波后均有 QRS，无脱落；QRS 时限 < 0.12 s。',
+    '二度Ⅰ型房室传导阻滞（文氏型）': '文氏型参考：P-P 间期恒定（心房率 75 次/分）；PR 间期进行性延长直至 QRS 脱落，随后 PR 重置；QRS 通常 < 0.12 s。',
+    '二度Ⅱ型房室传导阻滞（莫氏型）': '莫氏Ⅱ型参考：P-P 间期恒定；PR 间期恒定（不渐长）；QRS 突然间歇性脱落；长间歇 = 2 个 P-P 间期；QRS 可正常或增宽。',
+    '三度房室传导阻滞（完全性房室传导阻滞）': '三度参考：P 与 QRS 完全分离，PP 间期规则（75 次/分）、RR 间期规则（约 39 次/分）；无固定 PR；QRS 宽大畸形提示室性逸搏。',
+    '室性心动过速': '室速参考：连续 ≥3 个宽大畸形 QRS（≥0.12 s）；心室率约 130 次/分、节律大致规整；可见房室分离与夺获波（窄 QRS）。',
+    '心室颤动（室颤）': '室颤参考：无 P–QRS–T 波群；颤动波频率约 250–500 次/分、形态振幅间距完全不规则；无法识别 QRS，属可除颤心律——立即心肺复苏 + 电除颤。',
+    '窦性心动过速': '窦速参考：窦性 P 波规律出现、每个 P 后均有 QRS；心率 > 100 次/分（本例 120）；PR 0.12–0.20 s；QRS < 0.12 s。',
+    '窦性心动过缓': '窦缓参考：窦性心律，心率 < 60 次/分（本例 50）；PR 0.12–0.20 s；QRS < 0.12 s；P 与 QRS 一一对应、无脱落。',
+    '阵发性室上性心动过速（室上速）': '室上速参考：QRS 窄（< 0.12 s）、RR 绝对整齐、心室率 150–250 次/分（本例 180）；P 波常埋藏于 QRS/T 内不可见；突发突止。',
+    '右束支传导阻滞RBBB（II导联简化教学版）': 'RBBB 参考：QRS ≥ 0.12 s（本例 0.14 s），终末宽钝 S 波；PR 0.16 s、每个 P 后均有 QRS；T 波继发性倒置；临床 V1 典型呈 rsR′。',
+  };
+  return notes[rhythm] || '正常参考值：心率 60–100 次/分；PR 间期 0.12–0.20 s；QRS 时限 < 0.12 s（通常 0.06–0.10 s）。';
+}
+
+// 自动测量区间：x1/x2 为秒；rr 用于 QT 的 QTc 计算；prefix 为标签前缀
+const AUTO_RANGES = {
+  '窦性心律': {
+    PR: { x1: 1.00, x2: 1.16, prefix: 'PR：' },
+    QRS: { x1: 1.16, x2: 1.24, prefix: 'QRS：' },
+    QT: { x1: 1.16, x2: 1.60, rr: 0.80, prefix: 'QT：' },
+    RR: { x1: 1.20, x2: 2.00, prefix: 'RR：' },
+  },
+  '室性早搏': {
+    PR: { x1: 1.00, x2: 1.16, prefix: 'PR：' },
+    QRS: { x1: 2.52, x2: 2.68, prefix: 'QRS（室早）：' },
+    QT: { x1: 2.52, x2: 3.03, rr: 0.80, prefix: 'QT：' },
+    RR: { x1: 1.20, x2: 2.00, prefix: 'RR（窦性）：' },
+  },
+  '房性早搏': {
+    PR: { x1: 2.42, x2: 2.64, prefix: 'P′R：' },
+    QRS: { x1: 2.64, x2: 2.72, prefix: 'QRS：' },
+    QT: { x1: 2.64, x2: 3.08, rr: 0.80, prefix: 'QT：' },
+    RR: { x1: 1.20, x2: 2.00, prefix: 'RR（窦性）：' },
+  },
+  '一度房室传导阻滞': {
+    PR: { x1: 0.88, x2: 1.16, prefix: 'PR：' },
+    QRS: { x1: 1.16, x2: 1.24, prefix: 'QRS：' },
+    QT: { x1: 1.16, x2: 1.60, rr: 0.80, prefix: 'QT：' },
+    RR: { x1: 1.20, x2: 2.00, prefix: 'RR：' },
+  },
+  '二度Ⅰ型房室传导阻滞（文氏型）': {
+    PR: { x1: 0.40, x2: 0.58, prefix: 'PR（首个）：' },
+    QRS: { x1: 0.54, x2: 0.62, prefix: 'QRS：' },
+    QT: { x1: 0.54, x2: 0.98, rr: 0.88, prefix: 'QT：' },
+    RR: { x1: 0.58, x2: 1.46, prefix: 'RR（该周期）：' },
+  },
+  '二度Ⅱ型房室传导阻滞（莫氏型）': {
+    PR: { x1: 0.40, x2: 0.64, prefix: 'PR：' },
+    QRS: { x1: 0.64, x2: 0.72, prefix: 'QRS：' },
+    QT: { x1: 0.64, x2: 1.08, rr: 0.80, prefix: 'QT：' },
+    RR: { x1: 0.64, x2: 1.44, prefix: 'RR：' },
+  },
+  '三度房室传导阻滞（完全性房室传导阻滞）': {
+    PR: { x1: 2.00, x2: 2.38, prefix: 'P–QRS（无固定 PR）：' },
+    QRS: { x1: 2.38, x2: 2.52, prefix: 'QRS：' },
+    QT: { x1: 2.38, x2: 2.86, rr: 1.55, prefix: 'QT：' },
+    RR: { x1: 2.45, x2: 4.00, prefix: 'RR：' },
+  },
+  '室性心动过速': {
+    PR: { x1: 1.20, x2: 1.83, prefix: 'P–QRS（房室分离）：' },
+    QRS: { x1: 2.29, x2: 2.43, prefix: 'QRS：' },
+    QT: { x1: 2.29, x2: 2.77, rr: 0.46, prefix: 'QT：' },
+    RR: { x1: 2.36, x2: 2.82, prefix: 'RR：' },
+  },
+  // 新增：窦性心动过速（R 波位于 1.40 s；RR 0.50 s → 120 次/分）
+  '窦性心动过速': {
+    PR: { x1: 1.20, x2: 1.36, prefix: 'PR：' },
+    QRS: { x1: 1.36, x2: 1.44, prefix: 'QRS：' },
+    QT: { x1: 1.36, x2: 1.72, rr: 0.50, prefix: 'QT：' },
+    RR: { x1: 1.40, x2: 1.90, prefix: 'RR：' },
+  },
+  // 新增：窦性心动过缓（R 波位于 1.60 s；RR 1.20 s → 50 次/分）
+  '窦性心动过缓': {
+    PR: { x1: 1.40, x2: 1.56, prefix: 'PR：' },
+    QRS: { x1: 1.56, x2: 1.64, prefix: 'QRS：' },
+    QT: { x1: 1.56, x2: 1.98, rr: 1.20, prefix: 'QT：' },
+    RR: { x1: 1.60, x2: 2.80, prefix: 'RR：' },
+  },
+  // 新增：室上速（R 波位于 2.398 s；RR 0.333 s → 180 次/分）
+  '阵发性室上性心动过速（室上速）': {
+    PR: { x1: 2.198, x2: 2.358, prefix: 'P–QRS（P 波埋藏，PR 无法辨认）：' },
+    QRS: { x1: 2.358, x2: 2.438, prefix: 'QRS：' },
+    QT: { x1: 2.358, x2: 2.64, rr: 0.333, prefix: 'QT：' },
+    RR: { x1: 2.398, x2: 2.731, prefix: 'RR：' },
+  },
+  // 新增：RBBB（R 波位于 1.20 s；RR 0.80 s → 75 次/分，QRS 0.14 s）
+  '右束支传导阻滞RBBB（II导联简化教学版）': {
+    PR: { x1: 1.00, x2: 1.16, prefix: 'PR：' },
+    QRS: { x1: 1.16, x2: 1.30, prefix: 'QRS：' },
+    QT: { x1: 1.16, x2: 1.62, rr: 0.80, prefix: 'QT：' },
+    RR: { x1: 1.20, x2: 2.00, prefix: 'RR：' },
+  },
+};
+
+/* ============================================================
+   5. 判读依据、结论与考点卡片
+   ============================================================ */
+function buildText(rhythm, wave) {
+  if (rhythm === '心房颤动') {
+    const af = wave.afTimes, d = [];
+    for (let i = 0; i < af.length - 1; i++) d.push(af[i + 1] - af[i]);
+    const rate = 60 / (d.reduce((a, b) => a + b, 0) / d.length);
+    return {
+      criteria: [
+        'P 波消失：未见窦性 P 波，基线代之以形态、振幅、间距不一的细碎 f 波（f 波频率约 350–600 次/分）。',
+        `RR 间期绝对不齐：本段 RR 间期在 ${Math.min(...d).toFixed(2)}–${Math.max(...d).toFixed(2)} s 之间随机变化，长短不一、无任何规律。`,
+        `QRS 波群：形态正常，时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），提示激动经房室结正常下传。`,
+        `心室率：本段平均心室率约 ${Math.round(rate)} 次/分；因心室率绝对不齐，评估时需取多个 RR 间期的平均值。`,
+        'PR 间期：无 P 波，PR 间期无法测量。',
+      ],
+      conclusion: '心房颤动（RR 间期绝对不齐）',
+      teaching: [
+        '房颤三大心电图特征：P 波消失、代之以 f 波；RR 间期绝对不齐；QRS 波群通常窄（< 0.12 s）。',
+        'f 波频率 350–600 次/分（约 6–10 Hz），大小、形态、间距均不规则，是心房内多处微小折返的表现。',
+        '房颤时 P 波消失，因此 PR 间期不存在；心室率绝对不齐，需按多个 RR 间期取平均值评估。',
+        '与房早、室早鉴别：房早可见提前出现的 P′ 波、QRS 多窄、代偿间歇多不完全；室早 QRS 宽大畸形且其前无 P；房颤则 P 波消失且 RR 绝对不齐。',
+        '临床考点：房颤最需警惕血栓栓塞（尤其缺血性卒中），抗凝评估常用 CHA₂DS₂-VASc 评分；查体可见第一心音强弱不等、脉搏短绌。',
+      ],
+    };
+  }
+  if (rhythm === '房性早搏') {
+    return {
+      criteria: [
+        '提前出现的异位 P′ 波：P′ 波位于 2.46 s，早于预期的窦性 P 波（2.66 s），形态与窦性 P 波不同（本例 II 导联倒置）。',
+        `P′R 间期：${PAC_PR.toFixed(2)} s，较窦性 PR 间期 ${PR.toFixed(2)} s 延长（房早时 P′R 间期可延长）。`,
+        `QRS 波群：形态与窦性搏动一致，时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），提示激动经房室结正常下传。`,
+        '代偿间歇：房早前 RR 0.68 s + 房早后 RR 0.86 s = 1.54 s < 2×0.80 s（1.60 s），为不完全性代偿间歇。',
+        '基础心律：窦性心律，心率 75 次/分。',
+      ],
+      conclusion: '窦性心律伴房性早搏（不完全性代偿间歇）',
+      teaching: [
+        '房早三大特征：提前出现的异位 P′ 波（形态与窦性 P 波不同）、P′R 间期可正常或延长、QRS 波群形态一般正常（窄 QRS）。',
+        '代偿间歇：房早大多为不完全性代偿间歇（房早前、后 RR 之和 < 2×窦性 RR）；室早多为完全性代偿间歇，是两者鉴别的关键。',
+        '易漏诊点：P′ 波常重叠于前一心搏的 T 波上；本图为便于观察，将 P′ 波显示在 T 波之后。',
+        '与室早鉴别：室早 QRS 宽大畸形且其前无 P 波；房早 QRS 通常窄，且有提前出现的 P′ 波。',
+        '临床考点：房早可见于健康人，也常见于冠心病、甲亢、洋地黄中毒等；频发房早（>5–6 次/分）或成对房早需关注，可诱发房速或房颤。',
+      ],
+    };
+  }
+  if (rhythm === '一度房室传导阻滞') {
+    return {
+      criteria: [
+        'P 波：窦性 P 波，II 导联直立、形态一致；每个 QRS 波群前均有 1 个 P 波。',
+        `PR 间期：${PR_AVB1.toFixed(2)} s（约 7 小格），超过 0.20 s（5 小格）的上限，且各心动周期的 PR 间期恒定不变。`,
+        '无 QRS 脱落：每个 P 波后均跟随 QRS 波群，无 P 波下传中断——这是与二度房室传导阻滞鉴别的关键。',
+        `QRS 波群：时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），形态正常，提示心室除极顺序正常。`,
+        `RR 间期：${SINUS_RR.toFixed(2)} s，节律规则；心率 ${SINUS_RATE.toFixed(0)} 次/分。`,
+      ],
+      conclusion: `一度房室传导阻滞（PR 间期恒定延长 ${PR_AVB1.toFixed(2)} s）`,
+      teaching: [
+        '一度房室传导阻滞诊断标准：PR 间期 > 0.20 s（> 5 小格），每个 P 波均能下传心室、无 QRS 脱落，且 PR 间期恒定。',
+        '与二度鉴别：二度Ⅰ型（文氏）PR 间期逐渐延长直至 QRS 脱落；二度Ⅱ型 PR 间期恒定但出现 QRS 脱落；一度则始终无脱落。',
+        '阻滞部位：一度房室传导阻滞多为房室结内传导延缓，QRS 通常窄；若同时伴宽 QRS，提示阻滞部位可能位于希氏束以下。',
+        '临床意义：常见于心肌炎、冠心病（尤其急性下壁心肌梗死）、洋地黄中毒、电解质紊乱及迷走神经张力增高；多无症状，一般无需起搏器，但需治疗病因并随访。',
+        '考试记忆：PR 长而无脱落 = 一度；PR 渐长 + 脱落 = 二度Ⅰ型；PR 恒定 + 脱落 = 二度Ⅱ型；P 与 QRS 完全无关、心室率慢而规则 = 三度。',
+      ],
+    };
+  }
+  if (rhythm === '二度Ⅰ型房室传导阻滞（文氏型）') {
+    return {
+      criteria: [
+        '窦性 P 波规律出现：P-P 间期 0.80 s（心房率 75 次/分），P 波形态一致、II 导联直立。',
+        'PR 间期进行性延长：一个文氏周期内 3 个下传搏动的 PR 依次为 0.18、0.26、0.32 s，且延长幅度逐渐减小（0.08 → 0.06 s）。',
+        'QRS 脱落：第 4 个 P 波后无 QRS 波群（P 波未能下传心室），形成一次长间歇。',
+        'PR 间期重置：QRS 脱落后，下一个 P 波的 PR 间期缩短回 0.18 s，如此周而复始——本例为 4:3 传导（4 个 P 波对应 3 个 QRS）。',
+        `QRS 波群：时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），形态正常；平均心室率约 56 次/分（每周期 3 个 QRS / 3.20 s）。`,
+      ],
+      conclusion: '二度Ⅰ型房室传导阻滞（文氏现象，4:3 传导）',
+      teaching: [
+        '文氏周期四步：PR 间期进行性延长 → 一个 P 波不能下传（QRS 脱落）→ 脱落后 PR 间期重置缩短 → 周而复始。',
+        'RR 间期的细节考点：因 PR 延长量逐渐减小，脱落前的 RR 间期逐渐缩短，其后才出现长间歇，且该长间歇小于 2 个 P-P 间期。',
+        '传导比例写作 P:QRS，本例为 4:3；比例越小（如 3:2、4:3）说明脱落越多、心室率下降越明显。',
+        '阻滞部位与预后：文氏型多为房室结内阻滞，QRS 通常窄，常见于迷走张力增高、洋地黄、心肌炎、急性下壁心肌梗死，多数为良性、可逆，一般无需起搏器。',
+        '与二度Ⅱ型鉴别：Ⅱ型 PR 间期恒定、QRS 突然脱落、QRS 常增宽，易进展为三度，常需起搏器——记“PR 渐长 = Ⅰ型，PR 恒定 = Ⅱ型”。',
+      ],
+    };
+  }
+  if (rhythm === '二度Ⅱ型房室传导阻滞（莫氏型）') {
+    return {
+      criteria: [
+        '窦性 P 波规律出现：P-P 间期 0.80 s（心房率 75 次/分），P 波形态一致、II 导联直立。',
+        'PR 间期恒定：所有下传搏动的 PR 间期均为 0.24 s（已 > 0.20 s），逐搏完全相同，无进行性延长。',
+        '间歇性 QRS 脱落：每 3 个 P 波中第 3 个不能下传（3:2 传导），脱落突然发生、其前无 PR 渐长等先兆。',
+        '长间歇：因 PR 恒定，脱落后的 RR 间歇恰为 2 个 P-P 间期（1.60 s）；文氏型则小于 2 个 P-P 间期。',
+        `QRS 波群：时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），形态正常；平均心室率约 50 次/分（每周期 2 个 QRS / 2.40 s）。`,
+      ],
+      conclusion: '二度Ⅱ型房室传导阻滞（莫氏型，3:2 传导）',
+      teaching: [
+        '莫氏Ⅱ型三大特征：PR 间期恒定（正常或延长）、QRS 突然间歇性脱落、无 PR 渐长；本例为 3:2 传导。',
+        '与文氏型鉴别的核心：文氏型 PR 逐搏延长、脱落前 RR 逐渐缩短、长间歇 < 2 个 P-P、QRS 多窄；莫氏Ⅱ型 PR 恒定、脱落突然、长间歇 = 2 个 P-P、QRS 常增宽。',
+        '2:1 传导无法仅凭一张心电图分型（既可为Ⅰ型也可为Ⅱ型），需结合更长记录中 PR 是否逐搏变化；本例选用 3:2 以便直接观察恒定的 PR。',
+        '阻滞部位与预后：莫氏Ⅱ型多位于希氏束及其以下，QRS 常 ≥0.12 s，易进展为高度或三度房室传导阻滞，有晕厥、黑蒙者应尽早植入起搏器。',
+        '常见病因：急性前壁心肌梗死、心肌炎、心肌病、传导系统退行性变（Lev 病、Lenègre 病）及药物（β 受体阻滞剂、钙拮抗剂、洋地黄）过量。',
+      ],
+    };
+  }
+  if (rhythm === '三度房室传导阻滞（完全性房室传导阻滞）') {
+    return {
+      criteria: [
+        'P 波：窦性 P 波规律出现，PP 间期 0.80 s（心房率 75 次/分），形态一致。',
+        `QRS 波群：宽大畸形，时限约 ${QRS_ESCAPE.toFixed(2)} s（≥ 0.12 s），RR 间期 ${ESCAPE_RR.toFixed(2)} s（心室率约 ${(60 / ESCAPE_RR).toFixed(0)} 次/分）且规则——为室性逸搏心律。`,
+        '房室分离：P 波与 QRS 波群各自独立、互不相关；P 到其后 QRS 的距离逐搏变化（本例约 0.50 → 0.25 s），不存在固定的 PR 间期。',
+        `心房率 > 心室率：75 > ${(60 / ESCAPE_RR).toFixed(0)} 次/分，P 波数目多于 QRS 波群（本段 12 个 P 波对应 6 个 QRS）。`,
+        '辨认要点：P 波可落在 QRS 波群或 T 波的不同位置，部分 P 波可能被掩盖，需加长记录或多导联仔细寻找 P 波。',
+      ],
+      conclusion: '三度房室传导阻滞（完全性房室传导阻滞，室性逸搏心律）',
+      teaching: [
+        '三度房室传导阻滞三大特征：P 与 QRS 完全无关（房室分离）、PP 间期规则、RR 间期规则，且心房率 > 心室率（P 波多于 QRS）。',
+        '逸搏心律决定 QRS 形态与心室率：交界区逸搏 40–60 次/分、QRS 窄；室性逸搏 20–40 次/分、QRS 宽大畸形——本例为室性逸搏（约 39 次/分）。',
+        '与二度鉴别：二度仍有固定的 P–QRS 传导关系（PR 恒定或渐长）并出现脱落；三度则完全没有传导关系，P 与 QRS 各自按自己的节律跳动。',
+        '易漏诊点：P 波常埋在 QRS 波群或 T 波中，只凭短片段易误认为窦性心动过缓；可用阿托品或运动试验观察 P 波频率是否随心房率变化而心室率不变。',
+        '临床要点：常见于急性下壁心肌梗死、心肌炎、洋地黄中毒、传导系统退行性变；出现晕厥（Adams-Stokes 综合征）、心衰或心室率过慢时为起搏器的绝对适应证。',
+      ],
+    };
+  }
+  if (rhythm === '室性心动过速') {
+    return {
+      criteria: [
+        '连续宽大畸形的 QRS 波群：起始 2 次窦性搏动后，自 1.90 s 起连续出现 17 个宽大畸形的室性搏动（连续 ≥3 个室早即可诊断室性心动过速）。',
+        `QRS 时限：约 ${QRS_ESCAPE.toFixed(2)} s（> 0.12 s，即 > 3 小格），T 波与主波方向相反。`,
+        '节律与频率：RR 间期 0.46 s，心室率约 130 次/分，节律大致规整（室速可轻度不规则）。',
+        '房室分离：窦性 P 波按 0.80 s 独立出现，与 QRS 无固定关系；4.40 s 的 P 波恰好下传，形成夺获波（窄 QRS，4.56 s）——这是室速的特征性证据。',
+        '融合波：若窦性激动与室性激动几乎同时激动心室，可出现形态介于正常与室速之间的融合波；本段未展示，判读时需留意。',
+      ],
+      conclusion: '室性心动过速（宽大畸形 QRS，心室率约 130 次/分）',
+      teaching: [
+        '诊断标准：连续 3 个及以上室性早搏（QRS ≥0.12 s、宽大畸形、T 波相反），心室率 100–250 次/分，节律大致规整。',
+        '支持室速的证据：房室分离（P 与 QRS 无关）、夺获波（窄 QRS）、融合波、QRS 电轴明显偏移、胸前导联 QRS 同向性、RR 间期轻度不规则。',
+        '与室上速伴差异性传导鉴别：差传多呈典型束支阻滞图形、QRS < 0.14 s、起始向量与窦性一致、有相关 P 波、RR 绝对规则、对迷走刺激或腺苷有反应；室速 QRS 更宽、有房室分离/夺获/融合波、对腺苷多无反应。',
+        'Brugada 标准速记：胸前导联 QRS 同向性；或 R 波宽 > 0.04 s；或 QRS 起点至 S 波最低点 > 0.16 s；或 S 波最低点至 QRS 终末 > 0.04 s——任一符合即提示室速。',
+        '临床处理：血流动力学不稳定（低血压、意识改变、胸痛、心衰）立即同步电复律；稳定者可用胺碘酮/利多卡因，并纠正缺血、电解质紊乱、药物等诱因；持续性室速需评估 ICD 指征。',
+      ],
+    };
+  }
+  if (rhythm === '心室颤动（室颤）') {
+    return {
+      criteria: [
+        '正常 P 波、QRS 波群、T 波全部消失，心电图上无任何成形的波群。',
+        '基线代之以连续、快速、大小不一、形态各异、间距完全不规则的颤动波（频率约 250–500 次/分），波形无法用固定的周期或振幅描述。',
+        '无法识别 QRS 波群，因此无法测量心率、PR 间期与 QRS 时限。',
+        '心室肌呈多处无序的局部折返，心室无有效收缩——临床上无脉搏、无血压、意识丧失，即心脏骤停。',
+        '室颤属可除颤心律：一旦确认，应立即心肺复苏并尽早电除颤。',
+      ],
+      conclusion: '心室颤动（心脏骤停——需立即心肺复苏并电除颤）',
+      teaching: [
+        '心电图特征：P 波、QRS 波群、T 波均消失，代之以形态、振幅、间距完全不规则的颤动波；按颤动波振幅可分为粗颤（> 0.5 mV）与细颤（< 0.5 mV），细颤预后更差。',
+        '临床表现：意识丧失、大动脉（颈动脉）搏动消失、血压测不出、呼吸停止或叹息样呼吸——心电图只是确认手段，抢救不能等待心电图。',
+        '处理重点：立即高质量心肺复苏（胸外按压 100–120 次/分、深度 5–6 cm），尽早电除颤（双相波 120–200 J 或单相波 360 J，一次电击后立即继续按压）；肾上腺素 1 mg 每 3–5 分钟静推，难治性室颤可用胺碘酮或利多卡因；同时纠正 5H5T 等可逆病因。',
+        '与心房颤动鉴别：房颤有可辨认的窄 QRS 波群、RR 间期绝对不齐、有 f 波，患者血流动力学多稳定；室颤无 QRS、无有效心室收缩，属心脏骤停。',
+        '与多形性室速/尖端扭转型室速鉴别：后者仍可辨认宽大畸形的 QRS 波群与 T 波、QRS 围绕基线扭转；室颤则完全无成形 QRS。多形性室速恶化即为室颤，处理原则相同。',
+      ],
+    };
+  }
+  if (rhythm === '室性早搏') {
+    return {
+      criteria: [
+        `提前出现：QRS 波群在预期窦性搏动之前出现，配对间期 ${COUPLING.toFixed(2)} s；其前无 P 波。`,
+        `QRS 宽大畸形：时限 ${QRS_PVC.toFixed(2)} s（≥ 0.12 s，即 ≥ 3 小格），振幅增高、形态畸形。`,
+        '继发性 ST-T 改变：T 波方向与 QRS 主波方向相反（主波向上，T 波倒置）。',
+        `完全性代偿间歇：配对间期 ${COUPLING.toFixed(2)} s + 代偿间歇 ${COMP_PAUSE.toFixed(2)} s = ${(COUPLING + COMP_PAUSE).toFixed(2)} s = 2 个窦性 RR 间期。`,
+        '基础心律：窦性心律，心率 75 次/分。',
+      ],
+      conclusion: '窦性心律伴单发室性早搏',
+      teaching: [
+        '室早三大特征：提前出现、QRS 宽大畸形（≥ 0.12 s，即 ≥ 3 小格）、其前无 P 波。',
+        '伴随特征：T 波与 QRS 主波方向相反（继发性 ST-T 改变）；完全性代偿间歇。',
+        '与房早鉴别：房早可见提前出现的 P′ 波，QRS 通常窄，代偿间歇多不完全。',
+        '连续 3 个及以上室早为室性心动过速；R-on-T 现象（室早落在前一心动周期 T 波上）需警惕。',
+      ],
+    };
+  }
+  if (rhythm === '窦性心动过速') {
+    return {
+      criteria: [
+        'P 波：窦性 P 波规律出现，II 导联直立、形态一致；心率增快时 P-P 间期缩短至 0.50 s。',
+        `PR 间期：${PR.toFixed(2)} s（4 小格），位于 0.12–0.20 s 正常范围，且各心动周期恒定不变。`,
+        `QRS 波群：形态正常，时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），提示心室除极顺序正常。`,
+        'RR 间期：0.50 s（12.5 小格），节律规整；心率 = 60 / 0.50 = 120 次/分，超过 100 次/分的上限。',
+        'P 与 QRS 关系：每个 P 波后均跟随 1 个 QRS 波群，无脱落、无提前，房室传导 1:1。',
+      ],
+      conclusion: '窦性心动过速（心率 120 次/分）',
+      teaching: [
+        '诊断标准：窦性心律（P 波在 I、II、aVF 导联直立，aVR 倒置）+ 成人心率 > 100 次/分；本例 RR 0.50 s → 120 次/分。',
+        '常见原因：运动、情绪激动、发热、贫血、甲亢、失血或低血压、心力衰竭、疼痛，以及咖啡因、阿托品、β 受体激动剂等药物——多为生理性或继发于其他疾病。',
+        '与室上速鉴别：窦速心率多在 100–150 次/分、可见形态正常的窦性 P 波、起止逐渐（可找到诱因）、迷走刺激后心率逐渐减慢；室上速 150–250 次/分、突发突止、P 波常埋藏不可见、迷走刺激可突然终止。',
+        '与房性心动过速鉴别：房速的 P′ 波形态与窦性 P 波不同、可有 2:1 等传导比例使心室率不规则，常由频发房早诱发。',
+        '临床处理：以去除病因为主（退热、补液、纠正贫血与甲亢等），一般不需抗心律失常药；必要时可用 β 受体阻滞剂。窦速常是机体的代偿反应，切忌盲目"降心率"。',
+      ],
+    };
+  }
+  if (rhythm === '窦性心动过缓') {
+    return {
+      criteria: [
+        'P 波：窦性 P 波规律出现，II 导联直立、形态一致；P-P 间期 1.20 s（30 小格）。',
+        `PR 间期：${PR.toFixed(2)} s（4 小格），恒定且位于 0.12–0.20 s 正常范围。`,
+        `QRS 波群：形态正常，时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s）。`,
+        'RR 间期：1.20 s（30 小格），节律规整；心率 = 60 / 1.20 = 50 次/分，低于 60 次/分的下限。',
+        'P 与 QRS 关系：每个 P 波后均有 QRS（1:1 传导），无 QRS 脱落——这是与二度、三度房室传导阻滞鉴别的关键。',
+      ],
+      conclusion: '窦性心动过缓（心率 50 次/分）',
+      teaching: [
+        '诊断标准：窦性心律 + 成人心率 < 60 次/分；本例 RR 1.20 s → 50 次/分。',
+        '常见原因：生理性（运动员、睡眠、迷走张力高）；病理性（甲减、颅内压增高、黄疸、低体温、急性下壁心肌梗死、病态窦房结综合征）；药物（β 受体阻滞剂、钙拮抗剂、洋地黄、胺碘酮）。',
+        '与三度房室传导阻滞鉴别：三度时 P 与 QRS 完全无关（房室分离）、P 波明显多于 QRS、心室率更慢（20–40 次/分）且 QRS 常宽大畸形；窦缓每个 P 后均有 QRS，PR 间期恒定。',
+        '与二度房室传导阻滞鉴别：二度有 P 波后 QRS 脱落（P 波多于 QRS），窦缓无脱落。',
+        '临床处理：无症状者随访观察；出现头晕、黑蒙、晕厥、乏力，或心率 < 40 次/分、长间歇 > 3 s 者提示病态窦房结综合征，必要时植入起搏器；急性可逆病因（药物、缺血、电解质紊乱）应先去除，紧急时可用阿托品或异丙肾上腺素。',
+      ],
+    };
+  }
+  if (rhythm === '阵发性室上性心动过速（室上速）') {
+    return {
+      criteria: [
+        `QRS 波群：窄 QRS，时限 ${QRS_NORMAL.toFixed(2)} s（< 0.12 s），形态与窦性搏动一致，提示激动经房室结下传心室。`,
+        'RR 间期：0.333 s（约 8.3 小格），节律绝对整齐；心室率 = 60 / 0.333 = 180 次/分（150–250 次/分）。',
+        'P 波：体表心电图无法辨认——P 波埋藏于 QRS 波群或 T 波内（本图为教学示意，未画出独立 P 波）。',
+        'PR 间期：因 P 波不可见而无法测量。',
+        '起止特征：突发突止；本图展示的是发作期，未呈现起始与终止过程。',
+      ],
+      conclusion: '阵发性室上性心动过速（室上速，心室率 180 次/分）',
+      teaching: [
+        '三大特征：窄 QRS（< 0.12 s）、RR 间期绝对整齐、心室率 150–250 次/分（多在 150–200）；突发突止。',
+        '发生机制：绝大多数为折返——房室结折返性心动过速（AVNRT，最常见，P 波埋于 QRS 内或紧随其后）与房室折返性心动过速（AVRT，经旁路传导，逆行 P 波位于 QRS 之后）。',
+        '与窦速鉴别：窦速心率多 < 150 次/分、有清晰的窦性 P 波、起止渐缓、可找到诱因；室上速 > 150 次/分、突发突止、P 波常不可见、迷走刺激可突然终止。',
+        '与房颤、房扑鉴别：房颤 RR 绝对不齐、P 波消失代之以 f 波；房扑可见锯齿状 F 波、常呈 2:1 传导（心室率约 150 次/分）；室上速 RR 绝对整齐。',
+        '临床处理：血流动力学稳定者先刺激迷走（Valsalva 动作、颈动脉窦按摩），无效时首选腺苷静推，也可用维拉帕米、地尔硫䓬或 β 受体阻滞剂；若低血压、胸痛、心力衰竭、意识改变，立即同步电复律；反复发作者可行射频消融根治。',
+      ],
+    };
+  }
+  if (rhythm === '右束支传导阻滞RBBB（II导联简化教学版）') {
+    return {
+      criteria: [
+        'P 波：窦性 P 波规律出现（II 导联直立、形态一致），P-P 间期 0.80 s（心房率 75 次/分）。',
+        `PR 间期：${PR.toFixed(2)} s（4 小格），正常且恒定；每个 P 波后均跟随 QRS。`,
+        `QRS 时限：0.14 s（3.5 小格），≥ 0.12 s，QRS 波群增宽。`,
+        'QRS 形态：终末出现宽钝的 S 波（本图 II 导联），反映右心室除极延迟；临床 V1 导联典型呈 rsR′（M 型），V5、V6 导联呈宽 S 波。',
+        'ST-T：T 波继发性倒置，方向与 QRS 终末向量相反，属继发性改变，并非原发性心肌缺血。',
+      ],
+      conclusion: '右束支传导阻滞（RBBB，QRS 0.14 s）',
+      teaching: [
+        '诊断核心：QRS ≥ 0.12 s + 右束支阻滞图形（V1 呈 rsR′、V5/V6 及 II 导联终末宽 S 波）；PR 间期正常、每个 P 后均有 QRS。',
+        '电生理机制：右束支不应期较长，右心室激动需经左束支→室间隔→右心室传导，故右室除极延迟，形成 QRS 终末宽钝的 S 波或 R′ 波。',
+        '与室性早搏鉴别：室早提前出现、其前无 P 波、伴完全性代偿间歇；RBBB 的每个宽 QRS 前均有窦性 P 波，节律规整。',
+        '与室性心动过速鉴别：室速为连续 ≥3 个宽大畸形 QRS、心室率 100–250 次/分，常有房室分离、夺获波或融合波；RBBB 为窦性节律下 QRS 增宽，P 与 QRS 关系固定。',
+        '临床意义：年轻人可有不完全性 RBBB 而属正常变异；完全性 RBBB 常见于右心室负荷增加（肺心病、肺栓塞）、房间隔缺损、缺血性心脏病、心肌病及心脏术后。新出现 RBBB 伴胸痛需警惕急性肺栓塞或前壁心肌梗死；单纯 RBBB 一般不影响预后，无需特殊处理。',
+      ],
+    };
+  }
+  return {
+    criteria: [
+      'P 波：II 导联直立，形态一致；每个 QRS 波群前均有 1 个 P 波。',
+      `RR 间期：${SINUS_RR.toFixed(2)} s，节律规则；心率 ${SINUS_RATE.toFixed(0)} 次/分（60–100 次/分）。`,
+      `PR 间期：${PR.toFixed(2)} s，固定不变，位于 0.12–0.20 s 的正常范围。`,
+      `QRS 时限：${QRS_NORMAL.toFixed(2)} s（< 0.12 s），形态正常。`,
+      'ST 段与 T 波：T 波直立，ST 段无明显偏移。',
+    ],
+    conclusion: '正常窦性心律',
+    teaching: [
+      '诊断窦性心律的三个条件：P 波在 I、II、aVF 导联直立、aVR 导联倒置；每个 P 波后固定跟随 QRS 波群；心率 60–100 次/分。',
+      '正常值记忆：PR 间期 0.12–0.20 s（3–5 小格）；QRS 时限 < 0.12 s（< 3 小格）。',
+      'P 波代表心房除极，PR 间期反映房室传导，QRS 波代表心室除极——读图时按此顺序逐项核对。',
+    ],
+  };
+}
+
+/* ============================================================
+   6. 渲染与交互（标尺测量为新增功能）
+   ============================================================ */
+const canvas = document.getElementById('ecg');
+const ctx = canvas.getContext('2d');
+const selectEl = document.getElementById('rhythmSelect');
+const btnRuler = document.getElementById('btnRuler');
+const btnClear = document.getElementById('btnClear');
+const autoButtons = Array.from(document.querySelectorAll('[data-auto]'));
+const modeHint = document.getElementById('modeHint');
+
+const PAD = { l: 56, r: 24, t: 24, b: 42 };
+const FONT = '"Segoe UI", "Microsoft YaHei", sans-serif';
+let W = 1100, H = 420, plotW = 1, plotH = 1;
+let current = null;             // 当前病例数据
+let rulers = [];                // 标尺数据：{id, x1, x2, y, label}
+let pending = null;             // 第一次点击后的起点
+let rulerMode = false;
+let hover = null;               // 鼠标位置（用于预览）
+let nextId = 1;
+
+function buildCase(rhythm) {
+  const wave = buildWave(rhythm);
+  const ann = buildAnnotations(rhythm, wave);
+  const text = buildText(rhythm, wave);
+  return {
+    rhythm, sig: wave.sig, afTimes: wave.afTimes,
+    annotations: ann.annotations, marks: ann.marks,
+    metrics: buildMetrics(rhythm, wave),
+    criteria: text.criteria, conclusion: text.conclusion, teaching: text.teaching,
+    refNote: buildRefNote(rhythm),
+  };
+}
+
+// ---------- 坐标换算 ----------
+const xToPx = x => PAD.l + (x / DURATION) * plotW;
+const yToPx = y => PAD.t + ((Y_MAX - y) / (Y_MAX - Y_MIN)) * plotH;
+const pxToX = px => (px - PAD.l) / plotW * DURATION;
+const pxToY = px => Y_MAX - (px - PAD.t) / plotH * (Y_MAX - Y_MIN);
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  W = Math.max(1, canvas.clientWidth);
+  H = canvas.clientHeight || 420;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  plotW = W - PAD.l - PAD.r;
+  plotH = H - PAD.t - PAD.b;
+}
+
+// ---------- 通用绘制 ----------
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawTextBox(text, cx, cy, opt = {}) {
+  const size = opt.size || 12;
+  const color = opt.color || '#1f2937';
+  const bg = opt.bg || 'rgba(255,255,255,0.94)';
+  const border = opt.border || color;
+  const padX = opt.padX || 5, padY = 3;
+  ctx.font = `${opt.weight || 400} ${size}px ${FONT}`;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = size + padY * 2;
+  // 水平方向夹在绘图区内，避免文字被裁切
+  const cxc = Math.min(Math.max(cx, PAD.l + w / 2 + 2), PAD.l + plotW - w / 2 - 2);
+  roundRect(cxc - w / 2, cy - h / 2, w, h, 4);
+  ctx.fillStyle = bg;
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, cxc, cy + 0.5);
+  return { x: cxc - w / 2, y: cy - h / 2, w, h };
+}
+
+// 在竖直方向寻找不与已有文字重叠的位置（优先向上，其次向下）
+let labelRects = [];
+function placeFree(cx, cy, w, h) {
+  const minY = PAD.t + h / 2 + 2, maxY = PAD.t + plotH - h / 2 - 2;
+  const cands = [];
+  for (let k = 0; k < 7; k++) cands.push(cy - 22 * k);
+  for (let k = 1; k < 5; k++) cands.push(cy + 22 * k);
+  const overlaps = r => labelRects.some(o =>
+    !(r.x + r.w < o.x || r.x > o.x + o.w || r.y + r.h < o.y || r.y > o.y + o.h));
+  for (const c of cands) {
+    const yy = Math.min(maxY, Math.max(minY, c));
+    const rect = { x: cx - w / 2, y: yy - h / 2, w, h };
+    if (!overlaps(rect)) { labelRects.push(rect); return yy; }
+  }
+  const yy = Math.min(maxY, Math.max(minY, cy));
+  labelRects.push({ x: cx - w / 2, y: yy - h / 2, w, h });
+  return yy;
+}
+
+function drawGrid() {
+  ctx.lineWidth = 1;
+  // 纵向：小格 0.04 s，大格 0.20 s
+  for (let i = 0; i <= Math.round(DURATION / X_SMALL); i++) {
+    const x = xToPx(i * X_SMALL);
+    ctx.strokeStyle = i % 5 === 0 ? '#e9a7b2' : '#f8d7dd';
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + plotH); ctx.stroke();
+  }
+  // 横向：小格 0.10 mV，大格 0.50 mV
+  const k0 = Math.ceil(Y_MIN / Y_SMALL), k1 = Math.floor(Y_MAX / Y_SMALL);
+  for (let k = k0; k <= k1; k++) {
+    const y = yToPx(k * Y_SMALL);
+    ctx.strokeStyle = k % 5 === 0 ? '#e9a7b2' : '#f8d7dd';
+    ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l + plotW, y); ctx.stroke();
+  }
+  // 坐标刻度
+  ctx.fillStyle = '#6b7280';
+  ctx.font = `11px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let s = 0; s <= DURATION; s++) ctx.fillText(String(s), xToPx(s), PAD.t + plotH + 6);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let v = -0.5; v <= 1.5; v += 0.5) {
+    ctx.fillText(v.toFixed(1), PAD.l - 8, yToPx(v));
+  }
+  ctx.save();
+  ctx.translate(14, PAD.t + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('电压 (mV)　1 小格 = 0.1 mV', 0, 8);
+  ctx.restore();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('时间 (s)　1 小格 = 0.04 s，1 大格 = 0.2 s', PAD.l + plotW / 2, PAD.t + plotH + 24);
+}
+
+function drawWave(sig) {
+  ctx.strokeStyle = '#111827';
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < N; i += 2) {
+    const x = xToPx(T[i]), y = yToPx(sig[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+function drawMarks(marks) {
+  marks.forEach(m => {
+    const y = yToPx(m.y);
+    const x1 = xToPx(m.x1), x2 = xToPx(m.x2);
+    ctx.strokeStyle = m.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y - 5); ctx.lineTo(x1, y + 5);
+    ctx.moveTo(x2, y - 5); ctx.lineTo(x2, y + 5);
+    ctx.moveTo(x1, y); ctx.lineTo(x2, y);
+    ctx.stroke();
+  });
+}
+
+function drawAnnotations(annotations) {
+  annotations.forEach(a => {
+    const cx = xToPx(a.x);
+    const cy = yToPx(a.y) + a.dy;
+    const rect = drawTextBox(a.text, cx, cy, {
+      size: a.size, color: a.color,
+      bg: 'rgba(255,255,255,0.94)', border: a.color, padX: 4,
+    });
+    labelRects.push(rect);
+  });
+}
+
+// ---------- 标尺 ----------
+function rulerText(r) {
+  const t = r.x2 - r.x1;
+  const grid = t / X_SMALL;
+  return `${grid.toFixed(1)} 小格 · ${t.toFixed(2)} s`;
+}
+
+// 判断矩形区域是否压到波形（标尺文字需避开波形）
+function labelHitsWave(x0, x1, y0, y1) {
+  const i0 = Math.max(0, Math.floor(pxToX(x0) * FS));
+  const i1 = Math.min(N - 1, Math.ceil(pxToX(x1) * FS));
+  for (let i = i0; i <= i1; i++) {
+    const py = yToPx(current.sig[i]);
+    if (py >= y0 && py <= y1) return true;
+  }
+  return false;
+}
+
+function rulerLabelPos(r, w, h) {
+  const x1 = xToPx(Math.min(r.x1, r.x2)), x2 = xToPx(Math.max(r.x1, r.x2));
+  const lineY = yToPx(r.y);
+  const btn = deleteButtonPos(r);
+  // 候选 1：紧挨删除叉号右侧、与本条标尺同一高度（多条标尺各占一行，互不干扰）
+  const rx = btn.x + 14 + w / 2;
+  if (rx + w / 2 <= PAD.l + plotW - 2 &&
+      !labelHitsWave(rx - w / 2, rx + w / 2, lineY - h / 2, lineY + h / 2)) {
+    return { cx: rx, cy: lineY };
+  }
+  // 候选 2：放在本条标尺线正上方
+  const hw = w / 2 + 2;
+  const mx = Math.min(Math.max((x1 + x2) / 2, PAD.l + hw), PAD.l + plotW - hw);
+  if (!labelHitsWave(mx - w / 2, mx + w / 2, lineY - h - 2, lineY - 2)) {
+    return { cx: mx, cy: lineY - h / 2 - 4 };
+  }
+  // 候选 3：退回到跨度内波形最高点上方，尽量不遮挡波形
+  const i0 = Math.max(0, Math.floor(Math.min(r.x1, r.x2) * FS));
+  const i1 = Math.min(N - 1, Math.ceil(Math.max(r.x1, r.x2) * FS));
+  let top = Infinity, bottom = -Infinity;
+  for (let i = i0; i <= i1; i++) {
+    const py = yToPx(current.sig[i]);
+    if (py < top) top = py;
+    if (py > bottom) bottom = py;
+  }
+  let cy = Math.min(lineY - 16, top - h / 2 - 6);
+  if (cy - h / 2 < PAD.t + 2) cy = Math.min(bottom + h / 2 + 8, PAD.t + plotH - h / 2 - 2);
+  return { cx: mx, cy };
+}
+
+function deleteButtonPos(r) {
+  const lineY = yToPx(r.y);
+  const x = Math.min(xToPx(Math.max(r.x1, r.x2)) + 10, PAD.l + plotW - 8);
+  return { x, y: lineY };
+}
+
+function drawRuler(r) {
+  const y = yToPx(r.y);
+  const x1 = xToPx(Math.min(r.x1, r.x2));
+  const x2 = xToPx(Math.max(r.x1, r.x2));
+  ctx.strokeStyle = '#f7b267';
+  ctx.fillStyle = '#f7b267';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y - 6); ctx.lineTo(x1, y + 6);
+  ctx.moveTo(x2, y - 6); ctx.lineTo(x2, y + 6);
+  ctx.moveTo(x1, y); ctx.lineTo(x2, y);
+  ctx.stroke();
+
+  // 删除叉号
+  const btn = deleteButtonPos(r);
+  ctx.beginPath();
+  ctx.arc(btn.x, btn.y, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#64748b';
+  ctx.font = `12px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('×', btn.x, btn.y + 0.5);
+
+  // 文字：白底黑字，优先与本单位标尺同行、避开波形
+  const w = ctx.measureText(r.label).width + 12;
+  const p = rulerLabelPos(r, w, 20);
+  const cy = placeFree(p.cx, p.cy, w, 20);
+  drawTextBox(r.label, p.cx, cy, {
+    size: 12, color: '#111827', border: '#f0b27a', bg: 'rgba(255,255,255,0.97)', padX: 6, weight: 500,
+  });
+}
+
+function drawPending() {
+  if (!pending) return;
+  const y = yToPx(pending.y);
+  const x1 = xToPx(pending.x);
+  const x2 = hover ? xToPx(hover.x) : x1;
+  ctx.strokeStyle = '#f7b267';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(x1, y, 3, 0, Math.PI * 2); ctx.fillStyle = '#f7b267'; ctx.fill();
+  if (hover) {
+    const t = Math.abs(hover.x - pending.x);
+    drawTextBox(`${(t / X_SMALL).toFixed(1)} 小格 · ${t.toFixed(2)} s`,
+      (x1 + x2) / 2, y - 18, { size: 12, color: '#92400e', border: '#f0b27a', padX: 6, weight: 500 });
+  }
+}
+
+function draw() {
+  if (!current) return;
+  ctx.clearRect(0, 0, W, H);
+  labelRects = [];
+  drawGrid();
+  drawWave(current.sig);
+  if (annotationsVisible()) {
+    drawMarks(current.marks);
+    drawAnnotations(current.annotations);
+  }
+  rulers.forEach(drawRuler);
+  drawPending();
+}
+
+// 刷题模式下、查看解析之前，隐藏图内 P/QRS/T 标注与测量注释
+function annotationsVisible() {
+  return !(appMode === 'quiz' && !quizState.revealed);
+}
+
+// ---------- 标尺操作 ----------
+function addRuler(x1, x2, y, label) {
+  rulers.push({ id: nextId++, x1: Math.min(x1, x2), x2: Math.max(x1, x2), y, label });
+}
+
+function clearRulers() {
+  rulers = [];
+  pending = null;
+  draw();
+}
+
+function hitDelete(px, py) {
+  for (let i = rulers.length - 1; i >= 0; i--) {
+    const b = deleteButtonPos(rulers[i]);
+    if ((px - b.x) ** 2 + (py - b.y) ** 2 <= 100) {
+      rulers.splice(i, 1);
+      draw();
+      return true;
+    }
+  }
+  return false;
+}
+
+function canvasPoint(evt) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (evt.clientX - rect.left) * (W / rect.width);
+  const y = (evt.clientY - rect.top) * (H / rect.height);
+  return { x, y };
+}
+
+canvas.addEventListener('click', evt => {
+  const p = canvasPoint(evt);
+  if (hitDelete(p.x, p.y)) return;                 // 点中叉号：删除该条标尺
+  if (!rulerMode) return;
+  if (p.x < PAD.l || p.x > PAD.l + plotW || p.y < PAD.t || p.y > PAD.t + plotH) return;
+  const dataX = Math.min(DURATION, Math.max(0, pxToX(p.x)));
+  const dataY = Math.min(Y_MAX - 0.1, Math.max(Y_MIN + 0.05, pxToY(p.y)));
+  if (!pending) {
+    pending = { x: dataX, y: dataY };
+    hover = null;
+    draw();
+  } else {
+    const d = Math.abs(dataX - pending.x);
+    if (d > 0.01) {
+      addRuler(pending.x, dataX, pending.y, rulerText({ x1: pending.x, x2: dataX }));
+    }
+    pending = null;
+    hover = null;
+    draw();
+  }
+});
+
+canvas.addEventListener('mousemove', evt => {
+  if (!pending) {
+    // 悬停到叉号时给出可点击提示
+    const p = canvasPoint(evt);
+    let over = false;
+    rulers.forEach(r => {
+      const b = deleteButtonPos(r);
+      if ((p.x - b.x) ** 2 + (p.y - b.y) ** 2 <= 100) over = true;
+    });
+    canvas.style.cursor = over ? 'pointer' : (rulerMode ? 'crosshair' : 'default');
+    return;
+  }
+  const p = canvasPoint(evt);
+  hover = { x: Math.min(DURATION, Math.max(0, pxToX(p.x))) };
+  draw();
+});
+
+canvas.addEventListener('mouseleave', () => { hover = null; draw(); });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && pending) { pending = null; hover = null; draw(); }
+});
+
+// ---------- 工具栏 ----------
+function setRulerMode(on) {
+  rulerMode = on;
+  btnRuler.setAttribute('aria-pressed', String(on));
+  canvas.style.cursor = on ? 'crosshair' : 'default';
+  pending = null;
+  hover = null;
+  modeHint.textContent = on
+    ? '标尺测量已激活：在波形区点两下即可画出一条标尺（Esc 取消当前起点）。'
+    : '标尺测量未激活：点击「标尺测量」后再点两次波形区即可测量。';
+  draw();
+}
+
+btnRuler.addEventListener('click', () => setRulerMode(!rulerMode));
+btnClear.addEventListener('click', clearRulers);
+
+function runAuto(kind) {
+  const cfg = AUTO_RANGES[current.rhythm];
+  if (!cfg || !cfg[kind]) return;
+  const r = cfg[kind];
+  const t = r.x2 - r.x1;
+  const grid = t / X_SMALL;
+  let label = `${r.prefix}${t.toFixed(2)} s（${grid.toFixed(1)} 小格）`;
+  if (kind === 'QT') {
+    const qtc = t / Math.sqrt(r.rr);
+    label += ` · QTc ${qtc.toFixed(2)} s`;
+  }
+  if (kind === 'RR') {
+    label += ` · 心率 ${Math.round(60 / t)} 次/分`;
+  }
+  const lane = -0.80 + (rulers.length % 4) * 0.20;
+  addRuler(r.x1, r.x2, lane, label);
+  draw();
+}
+
+autoButtons.forEach(btn => btn.addEventListener('click', () => {
+  if (btn.disabled) return;
+  pending = null;
+  runAuto(btn.dataset.auto);
+}));
+
+// ---------- 页面数据 ----------
+function renderPanels(c) {
+  document.getElementById('metrics').innerHTML = c.metrics.map(m => `
+    <div class="metric">
+      <div class="label">${m.label}</div>
+      <div class="value">${m.value}</div>
+      <div class="help">${m.help}</div>
+    </div>`).join('');
+  document.getElementById('refNote').textContent = c.refNote;
+  document.getElementById('criteria').innerHTML = c.criteria.map(t => `<li>${t}</li>`).join('');
+  document.getElementById('conclusion').textContent = `结论：${c.conclusion}`;
+  document.getElementById('teaching').innerHTML = c.teaching.map(t => `<li>${t}</li>`).join('');
+}
+
+function setRhythm(rhythm) {
+  current = buildCase(rhythm);
+  rulers = [];
+  pending = null;
+  hover = null;
+  renderPanels(current);
+  const noAuto = (rhythm === '心房颤动' || rhythm === '心室颤动（室颤）');
+  autoButtons.forEach(btn => {
+    btn.disabled = noAuto;
+    btn.title = noAuto
+      ? '该心律节律绝对不规则或无法识别 QRS，自动测量不可用，请使用手动标尺'
+      : `${btn.textContent}（自动测量）`;
+  });
+  draw();
+}
+
+selectEl.addEventListener('change', () => setRhythm(selectEl.value));
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { resizeCanvas(); draw(); }, 120);
+});
+
+/* ============================================================
+   7. 自测刷题模式（学习模式 ↔ 刷题模式）
+   ============================================================ */
+// 题库：rhythm 与下拉框字符串严格一一对应
+const quizBank = [
+  { rhythm: '窦性心律', correct: '正常窦性心律',
+    distractors: ['房性早搏', '一度房室传导阻滞', '室性早搏'] },
+  { rhythm: '室性早搏', correct: '窦性心律伴室性早搏',
+    distractors: ['房性早搏', '二度Ⅰ型房室传导阻滞（文氏型）', '室性心动过速'] },
+  { rhythm: '心房颤动', correct: '心房颤动',
+    distractors: ['房性早搏', '室性心动过速', '心室颤动（室颤）'] },
+  { rhythm: '房性早搏', correct: '窦性心律伴房性早搏',
+    distractors: ['室性早搏', '一度房室传导阻滞', '心房颤动'] },
+  { rhythm: '一度房室传导阻滞', correct: '一度房室传导阻滞',
+    distractors: ['二度Ⅰ型房室传导阻滞（文氏型）', '二度Ⅱ型房室传导阻滞（莫氏型）',
+      '三度房室传导阻滞（完全性房室传导阻滞）'] },
+  { rhythm: '二度Ⅰ型房室传导阻滞（文氏型）', correct: '二度Ⅰ型房室传导阻滞（文氏型）',
+    distractors: ['二度Ⅱ型房室传导阻滞（莫氏型）', '一度房室传导阻滞',
+      '三度房室传导阻滞（完全性房室传导阻滞）'] },
+  { rhythm: '二度Ⅱ型房室传导阻滞（莫氏型）', correct: '二度Ⅱ型房室传导阻滞（莫氏型）',
+    distractors: ['二度Ⅰ型房室传导阻滞（文氏型）', '一度房室传导阻滞',
+      '三度房室传导阻滞（完全性房室传导阻滞）'] },
+  { rhythm: '三度房室传导阻滞（完全性房室传导阻滞）', correct: '三度房室传导阻滞（完全性房室传导阻滞）',
+    distractors: ['二度Ⅱ型房室传导阻滞（莫氏型）', '室性心动过速', '心室颤动（室颤）'] },
+  { rhythm: '室性心动过速', correct: '室性心动过速',
+    distractors: ['心室颤动（室颤）', '三度房室传导阻滞（完全性房室传导阻滞）', '室性早搏'] },
+  { rhythm: '心室颤动（室颤）', correct: '心室颤动（室颤）',
+    distractors: ['室性心动过速', '心房颤动', '三度房室传导阻滞（完全性房室传导阻滞）'] },
+  { rhythm: '窦性心动过速', correct: '窦性心动过速',
+    distractors: ['阵发性室上性心动过速（室上速）', '窦性心动过缓', '心房颤动'] },
+  { rhythm: '窦性心动过缓', correct: '窦性心动过缓',
+    distractors: ['窦性心动过速', '三度房室传导阻滞（完全性房室传导阻滞）',
+      '二度Ⅱ型房室传导阻滞（莫氏型）'] },
+  { rhythm: '阵发性室上性心动过速（室上速）', correct: '阵发性室上性心动过速（室上速）',
+    distractors: ['窦性心动过速', '室性心动过速', '心房颤动'] },
+  { rhythm: '右束支传导阻滞RBBB（II导联简化教学版）', correct: '右束支传导阻滞（RBBB）',
+    distractors: ['室性早搏', '室性心动过速', '一度房室传导阻滞'] },
+];
+
+const WRONG_KEY = 'ecgQuizWrongBook_v1';
+const LETTERS = ['A', 'B', 'C', 'D'];
+
+let appMode = 'study';              // 'study' | 'quiz'
+let studyRhythm = selectEl.value;   // 学习模式下选中的心律（刷题模式期间记忆）
+let wrongBook = loadWrongBook();    // 错题本：心律字符串数组（localStorage）
+let quizState = {
+  no: 0, done: 0, right: 0,
+  q: null, options: [], chosen: null,
+  submitted: false, revealed: false, correctNow: false, addedWrong: false,
+  wrongOnly: false, lastRhythm: null,
+};
+
+const quizCard = document.getElementById('quizCard');
+const quizOptionsEl = document.getElementById('quizOptions');
+const quizFeedbackEl = document.getElementById('quizFeedback');
+const quizTitleEl = document.getElementById('quizTitle');
+const quizStatsEl = document.getElementById('quizStats');
+const btnSubmit = document.getElementById('btnSubmit');
+const btnNext = document.getElementById('btnNext');
+const btnReveal = document.getElementById('btnReveal');
+const btnAddWrong = document.getElementById('btnAddWrong');
+const btnWrongList = document.getElementById('btnWrongList');
+const btnReset = document.getElementById('btnReset');
+
+/* ---------- 错题本（localStorage，仅本地存储） ---------- */
+function loadWrongBook() {
+  try {
+    const raw = localStorage.getItem(WRONG_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(r => typeof r === 'string') : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveWrongBook() {
+  try { localStorage.setItem(WRONG_KEY, JSON.stringify(wrongBook)); } catch (e) { /* 隐私模式下忽略 */ }
+}
+
+/* ---------- 抽题 ---------- */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function quizPool() {
+  if (quizState.wrongOnly) {
+    const p = quizBank.filter(b => wrongBook.includes(b.rhythm));
+    if (p.length) return p;
+  }
+  return quizBank;
+}
+
+function sourceTotal() {
+  return Math.max(1, quizPool().length);
+}
+
+function pickQuiz() {
+  let pool = quizPool();
+  if (pool.length > 1 && quizState.lastRhythm) {
+    const p2 = pool.filter(b => b.rhythm !== quizState.lastRhythm);
+    if (p2.length) pool = p2;   // 尽量不连续出同一题
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/* ---------- 界面刷新 ---------- */
+function setFeedback(text, cls = 'tip') {
+  quizFeedbackEl.textContent = text;
+  quizFeedbackEl.className = `quiz-feedback ${cls}`;
+}
+
+function updateQuizUI() {
+  const total = sourceTotal();
+  const pos = quizState.no > 0 ? ((quizState.no - 1) % total) + 1 : 1;
+  quizTitleEl.textContent = `第 ${pos} / ${total} 题`;
+  quizStatsEl.textContent =
+    `已做 ${quizState.done} 题 · 正确 ${quizState.right} 题 · ` +
+    `正确率 ${quizState.done ? Math.round(quizState.right / quizState.done * 100) + '%' : '—'}`;
+  btnSubmit.disabled = quizState.submitted;
+  btnReveal.disabled = !quizState.submitted || quizState.revealed;
+  btnNext.disabled = !quizState.revealed;       // 提交后须先查看解析，才能进入下一题
+  btnAddWrong.disabled = !(quizState.submitted && quizState.correctNow === false && !quizState.addedWrong);
+  btnWrongList.textContent = quizState.wrongOnly ? '返回全部题库' : `查看错题本（${wrongBook.length}）`;
+}
+
+function renderQuizOptions() {
+  quizOptionsEl.innerHTML = quizState.options.map((o, i) => `
+    <label class="opt" data-i="${i}">
+      <input type="radio" name="quizOption" value="${i}">
+      <span><b>${LETTERS[i]}.</b>&nbsp;${o.text}</span>
+    </label>`).join('');
+}
+
+/* ---------- 出题 / 答题流程 ---------- */
+function loadQuestion() {
+  const b = pickQuiz();
+  quizState.q = b;
+  quizState.lastRhythm = b.rhythm;
+  quizState.options = shuffle([
+    { text: b.correct, isCorrect: true },
+    ...b.distractors.map(t => ({ text: t, isCorrect: false })),
+  ]);
+  quizState.chosen = null;
+  quizState.submitted = false;
+  quizState.revealed = false;
+  quizState.correctNow = false;
+  quizState.addedWrong = false;
+  quizState.no += 1;
+  document.body.classList.remove('quiz-revealed');   // 重新隐藏解析内容
+  setRhythm(b.rhythm);          // 渲染波形；内部会清空标尺、按心律设置自动测量按钮
+  renderQuizOptions();
+  setFeedback('请选择一个诊断后提交答案。', 'tip');
+  updateQuizUI();
+  draw();
+}
+
+function submitQuiz() {
+  if (!quizState.submitted) {
+    if (quizState.chosen === null) {
+      setFeedback('请先选择一个诊断选项，再提交答案。', 'tip');
+      return;
+    }
+    quizState.submitted = true;
+    quizState.correctNow = quizState.options[quizState.chosen].isCorrect;
+    quizState.done += 1;
+    if (quizState.correctNow) quizState.right += 1;
+    quizOptionsEl.querySelectorAll('input').forEach(i => { i.disabled = true; });
+    Array.from(quizOptionsEl.children).forEach(l => l.classList.add('locked'));
+    setFeedback(quizState.correctNow ? '回答正确。' : '回答错误，可点击「查看解析」。',
+      quizState.correctNow ? 'ok' : 'err');
+  }
+  updateQuizUI();
+}
+
+function revealQuiz() {
+  if (!quizState.submitted || quizState.revealed) return;
+  quizState.revealed = true;
+  document.body.classList.add('quiz-revealed');    // 恢复图内标注与全部文字板块
+  let ci = -1;
+  Array.from(quizOptionsEl.children).forEach((lab, i) => {
+    if (quizState.options[i].isCorrect) { lab.classList.add('correct'); ci = i; }
+    if (i === quizState.chosen && !quizState.options[i].isCorrect) lab.classList.add('wrong');
+  });
+  const chosenTxt = quizState.chosen === null
+    ? '未选择'
+    : `${LETTERS[quizState.chosen]}. ${quizState.options[quizState.chosen].text}`;
+  setFeedback(
+    `正确答案：${LETTERS[ci]}. ${quizState.options[ci].text}｜你的选择：${chosenTxt}。` +
+    (quizState.correctNow ? '回答正确。' : '回答错误。'),
+    quizState.correctNow ? 'ok' : 'err');
+  updateQuizUI();
+  draw();
+}
+
+function nextQuestion() {
+  if (!quizState.revealed) return;
+  loadQuestion();
+}
+
+function addToWrongBook() {
+  if (!quizState.submitted || quizState.correctNow || quizState.addedWrong) return;
+  const r = quizState.q.rhythm;
+  if (!wrongBook.includes(r)) { wrongBook.push(r); saveWrongBook(); }
+  quizState.addedWrong = true;
+  setFeedback(`已加入错题本（当前共 ${wrongBook.length} 题）。`, 'tip');
+  updateQuizUI();
+}
+
+function toggleWrongOnly() {
+  if (!quizState.wrongOnly && wrongBook.length === 0) {
+    setFeedback('错题本还是空的：先做几题，答错后点「加入错题本」。', 'tip');
+    return;
+  }
+  quizState.wrongOnly = !quizState.wrongOnly;
+  quizState.no = 0;
+  loadQuestion();
+  setFeedback(quizState.wrongOnly
+    ? `已切换到错题本：共 ${wrongBook.length} 题，只从错题中随机抽题。`
+    : '已返回全部题库。', 'tip');
+}
+
+function resetQuiz() {
+  if (!confirm('确定重置做题统计并清空错题本吗？该操作不可撤销。')) return;
+  quizState.done = 0;
+  quizState.right = 0;
+  wrongBook = [];
+  saveWrongBook();
+  quizState.wrongOnly = false;
+  quizState.no = 0;
+  if (appMode === 'quiz') {
+    loadQuestion();
+    setFeedback('已重置统计并清空错题本。', 'tip');
+  } else {
+    updateQuizUI();
+  }
+}
+
+/* ---------- 模式切换 ---------- */
+function setMode(mode) {
+  appMode = mode;
+  const isQuiz = mode === 'quiz';
+  document.body.classList.toggle('quiz-mode', isQuiz);
+  if (!isQuiz) document.body.classList.remove('quiz-revealed');
+  quizCard.hidden = !isQuiz;
+  selectEl.disabled = isQuiz;               // 刷题模式禁用心律下拉
+  document.querySelectorAll('.mode-switch label').forEach(l => {
+    l.classList.toggle('active', l.querySelector('input').checked);
+  });
+  if (isQuiz) {
+    setRulerMode(false);
+    selectEl.selectedIndex = -1;            // 不显示心律名，避免泄露答案
+    quizState.no = 0;
+    quizState.wrongOnly = false;
+    loadQuestion();
+  } else {
+    selectEl.value = studyRhythm;           // 恢复学习模式原选中心律
+    setRhythm(studyRhythm);
+  }
+}
+
+document.querySelectorAll('input[name="modeSwitch"]').forEach(r => {
+  r.addEventListener('change', () => { if (r.checked) setMode(r.value); });
+});
+
+selectEl.addEventListener('change', () => {
+  if (appMode === 'study') studyRhythm = selectEl.value;
+});
+
+quizOptionsEl.addEventListener('change', e => {
+  if (e.target.name !== 'quizOption') return;
+  quizState.chosen = Number(e.target.value);
+  setFeedback(`已选择 ${LETTERS[quizState.chosen]}. ${quizState.options[quizState.chosen].text}，点击「提交答案」确认。`, 'tip');
+});
+
+btnSubmit.addEventListener('click', submitQuiz);
+btnReveal.addEventListener('click', revealQuiz);
+btnNext.addEventListener('click', nextQuestion);
+btnAddWrong.addEventListener('click', addToWrongBook);
+btnWrongList.addEventListener('click', toggleWrongOnly);
+btnReset.addEventListener('click', resetQuiz);
+
+resizeCanvas();
+setRhythm(selectEl.value);
+
+</script>
+</body>
+</html>
